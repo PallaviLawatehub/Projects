@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-frontend-nginx-config
+  labels:
+    app: {{ .Release.Name }}-{{ .Values.frontend.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # Handle Angular routing
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Proxy API requests to the backend
+        location /api/ {
+            proxy_pass http://{{ .Release.Name }}-{{ .Values.backend.name }}:{{ .Values.backend.service.port }};
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+        }
+    }

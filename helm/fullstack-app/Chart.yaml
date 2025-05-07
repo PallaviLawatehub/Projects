@@ -1,0 +1,14 @@
+apiVersion: v2
+name: fullstack-app
+description: A Helm chart for Fullstack Task Management Application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - fullstack
+  - angular
+  - nodejs
+  - mysql
+maintainers:
+  - name: PallaviLawatehub
+    url: https://github.com/PallaviLawatehub/Projects

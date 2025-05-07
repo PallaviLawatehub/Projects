@@ -1,0 +1,114 @@
+# Default values for fullstack-app
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  environment: production
+  namespace: default
+
+# Frontend configuration
+frontend:
+  name: frontend
+  replicaCount: 1
+  image:
+    repository: localhost:32000/fullstack-app_frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
+    hosts:
+      - host: task-manager.local
+        paths:
+          - path: /
+            pathType: Prefix
+
+# Backend configuration
+backend:
+  name: backend
+  replicaCount: 1
+  image:
+    repository: localhost:32000/fullstack-app_backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+    targetPort: 3000
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  env:
+    DB_HOST: my-fullstack-app-mysql
+    DB_NAME: taskmanager
+    DB_USER: root
+    # DB_PASSWORD is set from secrets
+
+# Database configuration
+mysql:
+  enabled: true
+  name: mysql
+  image:
+    repository: mysql
+    tag: 8.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3306
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    MYSQL_DATABASE: taskmanager
+    MYSQL_ROOT_PASSWORD: ""  # Will be set from secrets
+
+# Secrets configuration
+secrets:
+  mysql:
+    rootPassword: "changeme"  # Should be overridden in production
+  backend:
+    dbPassword: "changeme"    # Should be overridden in production
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  hosts:
+    - host: task-manager.local
+      paths:
+        - path: /
+          pathType: Prefix
+        - path: /api
+          pathType: Prefix
+          backend: backend
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: ""
