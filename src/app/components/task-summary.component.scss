@@ -1,0 +1,22 @@
+.task-summary-container {
+  max-width: 400px;
+  margin: 32px auto;
+  background: #f0f4fa;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  padding: 20px;
+  text-align: center;
+  h2 {
+    color: #3a3a3a;
+    margin-bottom: 16px;
+  }
+  ul {
+    list-style: none;
+    padding: 0;
+    li {
+      font-size: 1.1rem;
+      margin: 8px 0;
+      color: #555;
+    }
+  }
+}

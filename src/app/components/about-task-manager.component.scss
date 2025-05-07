@@ -1,0 +1,17 @@
+.about-task-manager-container {
+  max-width: 500px;
+  margin: 40px auto;
+  background: #eafaf1;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  padding: 24px;
+  text-align: center;
+  h2 {
+    color: #1c7c54;
+    margin-bottom: 16px;
+  }
+  p {
+    font-size: 1.1rem;
+    color: #444;
+  }
+}
