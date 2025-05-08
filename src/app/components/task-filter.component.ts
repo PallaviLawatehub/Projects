@@ -67,10 +67,9 @@ import { ApiService, User } from '../services/api.service';
       border-radius: 8px;
       padding: 16px;
       margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      position: sticky;
-      top: 130px; /* Position below both the main navbar and board header */
-      z-index: 140; /* Below the board header z-index */
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      width: 95%;
+      /* Removed position:sticky from here as it's handled by the parent container */
     }
     
     .search-box {
@@ -79,7 +78,7 @@ import { ApiService, User } from '../services/api.service';
     }
     
     .search-input {
-      width: 100%;
+      width: 99%;
       padding: 10px 0px 10px 12px;
       border: 1px solid #DFE1E6;
       border-radius: 4px;

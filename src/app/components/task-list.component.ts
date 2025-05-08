@@ -7,6 +7,7 @@ import { Router, NavigationEnd } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TaskFilterComponent } from './task-filter.component';
 import { TaskDialogComponent } from './task-dialog.component';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-task-list',
@@ -14,30 +15,37 @@ import { TaskDialogComponent } from './task-dialog.component';
   imports: [CommonModule, FormsModule, TaskFilterComponent, TaskDialogComponent],
   template: `
     <div class="task-board">
-      <div class="board-header">
-        <div class="board-title">
-          <h2>Task Board</h2>
-          <div *ngIf="currentUser" class="user-info">
-            <span class="user-avatar">{{ currentUser.name.charAt(0) }}</span>
-            <span class="user-name">{{ currentUser.name }}</span>
-            <span class="user-role">{{ currentUser.role | titlecase }}</span>
-            <button (click)="logout()" class="logout-btn">Logout</button>
+      <!-- Fixed header section that doesn't scroll -->
+      <div class="fixed-header-section">
+        <div class="board-header">
+          <div class="board-title">
+            <h2>Task Board</h2>
+            <div *ngIf="currentUser" class="user-info">
+              <span class="user-avatar">{{ currentUser.name.charAt(0) }}</span>
+              <span class="user-name">{{ currentUser.name }}</span>
+              <span class="user-role">{{ currentUser.role | titlecase }}</span>
+              <button (click)="logout()" class="logout-btn">Logout</button>
+            </div>
+          </div>
+          <div class="board-actions">
+            <button (click)="loadTasks()" class="refresh-btn">Refresh Tasks</button>
+            <button (click)="refreshUsers()" class="refresh-btn">Refresh Users</button>
+            <button (click)="toggleMyTasks()" class="my-tasks-btn" [class.active]="showingMyTasks">
+              {{ showingMyTasks ? 'Show All Tasks' : 'My Tasks' }}
+            </button>
+            <button (click)="openCreateTaskDialog()" class="add-task-btn">Add Task</button>
           </div>
         </div>
-        <div class="board-actions">
-          <button (click)="loadTasks()" class="refresh-btn">Refresh Tasks</button>
-          <button (click)="refreshUsers()" class="refresh-btn">Refresh Users</button>
-          <button (click)="toggleMyTasks()" class="my-tasks-btn" [class.active]="showingMyTasks">
-            {{ showingMyTasks ? 'Show All Tasks' : 'My Tasks' }}
-          </button>
-          <button (click)="openCreateTaskDialog()" class="add-task-btn">Add Task</button>
+        
+        <!-- Task Filter Component - Fixed in header section -->
+        <div class="filter-section">
+          <app-task-filter (filtersChanged)="applyFilters($event)"></app-task-filter>
         </div>
       </div>
       
-      <!-- Task Filter Component -->
-      <app-task-filter (filtersChanged)="applyFilters($event)"></app-task-filter>
-      
-      <div class="board-columns">
+      <!-- Scrollable content section -->
+      <div class="scrollable-content">
+        <div class="board-columns">
         <!-- Pending Column -->
         <div class="column pending-column">
           <div class="column-header">
@@ -201,6 +209,7 @@ import { TaskDialogComponent } from './task-dialog.component';
             </div>
           </div>
         </div>
+        </div>
       </div>
       
       <!-- Task Dialog Component -->
@@ -216,10 +225,27 @@ import { TaskDialogComponent } from './task-dialog.component';
   styles: [`
     .task-board {
       width: 100%;
-      min-height: calc(100vh - 70px); /* Subtract navbar height */
+      height: calc(100vh - 70px); /* Subtract navbar height */
       margin: 0;
       padding: 0px;
       background-color: #F4F5F7;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden; /* Prevent scrolling on the main container */
+    }
+    
+    .fixed-header-section {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      background-color: #F4F5F7;
+    }
+    
+    .scrollable-content {
+      flex: 1;
+      overflow-y: auto; /* Enable scrolling for this section only */
+      padding-bottom: 20px;
+      position: relative; /* Create a positioning context for sticky elements */
     }
     .board-header {
       display: flex;
@@ -228,9 +254,7 @@ import { TaskDialogComponent } from './task-dialog.component';
       padding: 20px;
       background-color: white;
       border-bottom: 1px solid #DFE1E6;
-      margin-bottom: 20px;
-      position: sticky;
-      top: 50px; /* Position below the main navbar */
+      margin-bottom: 0; /* Remove margin to avoid gap */
       z-index: 150;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
@@ -301,11 +325,40 @@ import { TaskDialogComponent } from './task-dialog.component';
       text-decoration: underline;
       padding: 0;
     }
+    /* Filter section in the fixed header */
+    .filter-section {
+      padding: 0 20px;
+      margin-bottom: 20px;
+      background-color: #F4F5F7;
+      width: 100%;
+    }
+    
     .board-columns {
       display: flex;
       gap: 20px;
       padding: 0 20px 20px;
       overflow-x: auto;
+      /* Only apply scrollbar styling in development environment */
+      scrollbar-width: ${!environment.production ? 'thin' : 'none'};
+      scrollbar-color: ${!environment.production ? 'rgba(0, 82, 204, 0.5) #F4F5F7' : 'transparent transparent'};
+    }
+    
+    /* Webkit scrollbar styling for development environment only */
+    .board-columns::-webkit-scrollbar {
+      height: ${!environment.production ? '8px' : '0'};
+    }
+    
+    .board-columns::-webkit-scrollbar-track {
+      background: #F4F5F7;
+      border-radius: 4px;
+      display: ${!environment.production ? 'block' : 'none'};
+    }
+    
+    .board-columns::-webkit-scrollbar-thumb {
+      background-color: rgba(0, 82, 204, 0.5);
+      border-radius: 4px;
+      border: 2px solid #F4F5F7;
+      display: ${!environment.production ? 'block' : 'none'};
     }
     .column {
       flex: 1;
@@ -332,6 +385,10 @@ import { TaskDialogComponent } from './task-dialog.component';
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: sticky;
+      top: 0; /* Stick to the top of the scrollable container */
+      z-index: 10;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     }
     .column-header h3 {
       margin: 0;
@@ -349,6 +406,29 @@ import { TaskDialogComponent } from './task-dialog.component';
     .column-content {
       padding: 12px;
       min-height: 100px;
+      max-height: calc(100vh - 240px); /* Limit height to create vertical scrolling */
+      overflow-y: auto;
+      /* Only apply scrollbar styling in development environment */
+      scrollbar-width: ${!environment.production ? 'thin' : 'none'};
+      scrollbar-color: ${!environment.production ? 'rgba(0, 82, 204, 0.5) #F4F5F7' : 'transparent transparent'};
+    }
+    
+    /* Webkit scrollbar styling for development environment only */
+    .column-content::-webkit-scrollbar {
+      width: ${!environment.production ? '8px' : '0'};
+    }
+    
+    .column-content::-webkit-scrollbar-track {
+      background: #F4F5F7;
+      border-radius: 4px;
+      display: ${!environment.production ? 'block' : 'none'};
+    }
+    
+    .column-content::-webkit-scrollbar-thumb {
+      background-color: rgba(0, 82, 204, 0.5);
+      border-radius: 4px;
+      border: 2px solid #F4F5F7;
+      display: ${!environment.production ? 'block' : 'none'};
     }
     .task-card {
       background-color: white;
@@ -905,11 +985,20 @@ export class TaskListComponent implements OnInit, OnDestroy {
   }
   
   saveTask(task: Task): void {
-    if (this.isEditMode && task.id) {
-      // Update existing task
+    console.log('Saving task:', task, 'isEditMode:', this.isEditMode);
+    
+    // Make sure we have the task ID from the selected task if we're in edit mode
+    if (this.isEditMode && this.selectedTask && this.selectedTask.id) {
+      // Ensure the task has the correct ID from the selected task
+      task.id = this.selectedTask.id;
+      console.log('Updating existing task with ID:', task.id);
+      
+      // Update existing task - let the API service handle the formatting
       this.apiService.updateTask(task).subscribe(
         (updatedTask: Task) => {
           console.log('Task updated successfully:', updatedTask);
+          
+          // Force reload tasks to ensure we have the latest data
           this.loadTasks();
           this.closeTaskDialog();
         },

@@ -308,7 +308,22 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   
   onSave() {
     if (this.isFormValid()) {
-      this.save.emit(this.taskData);
+      // Ensure we're sending a properly formatted task object
+      // Make a clean copy to avoid reference issues
+      const taskToSave: Task = {
+        ...this.taskData,
+        // Preserve the ID for updates
+        id: this.taskData.id,
+        // Ensure strings are trimmed
+        title: this.taskData.title.trim(),
+        description: this.taskData.description.trim(),
+        // Ensure other fields have proper values
+        status: this.taskData.status || 'pending',
+        priority: this.taskData.priority || 'medium'
+      };
+      
+      console.log('Task dialog emitting save with task:', taskToSave);
+      this.save.emit(taskToSave);
     }
   }
   

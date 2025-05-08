@@ -12,7 +12,6 @@ import { RouterOutlet, RouterLink } from '@angular/router';
       <a routerLink="/about" routerLinkActive="active">About</a>
     </nav>
     <div class="container">
-      <h1>Task Manager</h1>
       <router-outlet></router-outlet>
     </div>
   `,
@@ -22,8 +21,7 @@ import { RouterOutlet, RouterLink } from '@angular/router';
       justify-content: center;
       gap: 24px;
       background: linear-gradient(90deg, #ffb347, #ffcc33);
-      padding: 16px 0;
-      margin-bottom: 30px;
+      padding: 5px 0;
       position: sticky;
       top: 0;
       z-index: 200; /* Higher than other sticky elements */
@@ -42,17 +40,11 @@ import { RouterOutlet, RouterLink } from '@angular/router';
       background: #ffb347;
     }
     .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 20px;
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            margin: 0 30px;
     }
     h1 {
       text-align: center;
       color: #333;
-      margin-bottom: 30px;
     }
   `]
 })

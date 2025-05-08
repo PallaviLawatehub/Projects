@@ -45,7 +45,12 @@ export class ApiService {
       if (filters.assignee) params = params.set('assignee', filters.assignee);
     }
     
-    return this.http.get<Task[]>(`${this.apiUrl}/api/tasks`, { params });
+    // Fix for API URL path construction
+    const apiPath = environment.production ? 
+      `${this.apiUrl}/tasks` : 
+      `${this.apiUrl}/api/tasks`;
+      
+    return this.http.get<Task[]>(apiPath, { params });
   }
 
   // Get user's tasks with optional filters
@@ -69,8 +74,13 @@ export class ApiService {
       // No need to add assignee filter for user tasks
     }
     
+    // Fix for API URL path construction
+    const apiPath = environment.production ? 
+      `${this.apiUrl}/tasks/user/${currentUser.id}` : 
+      `${this.apiUrl}/api/tasks/user/${currentUser.id}`;
+    
     // Get tasks for the current user from the API with filters
-    return this.http.get<Task[]>(`${this.apiUrl}/api/tasks/user/${currentUser.id}`, { params })
+    return this.http.get<Task[]>(apiPath, { params })
       .pipe(
         map(tasks => {
           console.log(`Received ${tasks.length} tasks for user ${currentUser.name} (ID: ${currentUser.id})`);
@@ -87,14 +97,24 @@ export class ApiService {
       task.userId = currentUser.id;
     }
     
+    // Fix for API URL path construction
+    const apiPath = environment.production ? 
+      `${this.apiUrl}/tasks` : 
+      `${this.apiUrl}/api/tasks`;
+    
     // Send the task to the API
-    return this.http.post<Task>(`${this.apiUrl}/api/tasks`, task);
+    return this.http.post<Task>(apiPath, task);
   }
 
   // Update task status
   updateTaskStatus(id: number, status: string): Observable<Task> {
+    // Fix for API URL path construction
+    const apiPath = environment.production ? 
+      `${this.apiUrl}/tasks/${id}` : 
+      `${this.apiUrl}/api/tasks/${id}`;
+    
     // Send a PATCH request to update just the status
-    return this.http.patch<Task>(`${this.apiUrl}/api/tasks/${id}`, {
+    return this.http.patch<Task>(apiPath, {
       status: status as 'pending' | 'in_progress' | 'completed' | 'blocked'
     });
   }
@@ -102,17 +122,45 @@ export class ApiService {
   // Update task
   updateTask(task: Task): Observable<Task> {
     if (!task.id) {
+      console.error('Cannot update task: Missing task ID');
       return of({} as Task);
     }
     
+    // Format data exactly as expected by the backend
+    // The backend expects these specific fields in this format
+    const updatedTask = {
+      title: task.title?.trim() || '',
+      description: task.description?.trim() || '',
+      status: task.status || 'pending',
+      priority: task.priority || 'medium',
+      assignee: task.assignee || null,  // Backend expects null for empty assignee
+      dueDate: task.dueDate || null,    // Backend expects null for empty dueDate
+      userId: task.userId || null       // Backend expects null for empty userId
+    };
+    
+    console.log('Sending task update request:', updatedTask);
+    
+    // Fix for API URL path construction
+    // In production, environment.apiUrl is '/api' and we don't want to double the /api prefix
+    const apiPath = environment.production ? 
+      `${this.apiUrl}/tasks/${task.id}` : 
+      `${this.apiUrl}/api/tasks/${task.id}`;
+    
+    console.log('Using API path:', apiPath);
+    
     // Send a PUT request to update the entire task
-    return this.http.put<Task>(`${this.apiUrl}/api/tasks/${task.id}`, task);
+    return this.http.put<Task>(apiPath, updatedTask);
   }
 
   // Delete task
   deleteTask(id: number): Observable<any> {
+    // Fix for API URL path construction
+    const apiPath = environment.production ? 
+      `${this.apiUrl}/tasks/${id}` : 
+      `${this.apiUrl}/api/tasks/${id}`;
+    
     // Send a DELETE request
-    return this.http.delete<any>(`${this.apiUrl}/api/tasks/${id}`);
+    return this.http.delete<any>(apiPath);
   }
   
   // Search tasks
@@ -122,11 +170,21 @@ export class ApiService {
   
   // Get all users
   getUsers(): Observable<User[]> {
-    return this.http.get<User[]>(`${this.apiUrl}/api/users`);
+    // Fix for API URL path construction
+    const apiPath = environment.production ? 
+      `${this.apiUrl}/users` : 
+      `${this.apiUrl}/api/users`;
+    
+    return this.http.get<User[]>(apiPath);
   }
   
   // Get user by ID
   getUser(id: number): Observable<User> {
-    return this.http.get<User>(`${this.apiUrl}/api/users/${id}`);
+    // Fix for API URL path construction
+    const apiPath = environment.production ? 
+      `${this.apiUrl}/users/${id}` : 
+      `${this.apiUrl}/api/users/${id}`;
+    
+    return this.http.get<User>(apiPath);
   }
 }
