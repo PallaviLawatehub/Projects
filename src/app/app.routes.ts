@@ -6,6 +6,7 @@ import { AboutTaskManagerComponent } from './components/about-task-manager.compo
 import { TaskSummaryComponent } from './components/task-summary.component';
 import { DashboardComponent } from './components/dashboard.component';
 import { LoginComponent } from './components/login.component';
+import { TaskListViewComponent } from './components/task-list-view.component';
 
 export const routes: Routes = [
   { path: '', component: TaskListComponent },
@@ -14,4 +15,5 @@ export const routes: Routes = [
   { path: 'about', component: AboutTaskManagerComponent },
   { path: 'summary', component: TaskSummaryComponent },
   { path: 'dashboard', component: DashboardComponent },
+  { path: 'list-view', component: TaskListViewComponent },
 ];

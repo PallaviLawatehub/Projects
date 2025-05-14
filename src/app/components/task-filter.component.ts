@@ -14,7 +14,7 @@ import { ApiService, User } from '../services/api.service';
           type="text" 
           [(ngModel)]="searchTerm" 
           (input)="onSearchChange()"
-          placeholder="Search tasks..." 
+          placeholder="Search by Id, title or description..." 
           class="search-input"
         >
         <button *ngIf="searchTerm" (click)="clearSearch()" class="clear-btn">×</button>
@@ -48,6 +48,8 @@ import { ApiService, User } from '../services/api.service';
             <option *ngFor="let user of users" [value]="user">{{ user }}</option>
           </select>
         </div>
+        
+
         
         <div class="filter-group">
           <button 
@@ -83,6 +85,13 @@ import { ApiService, User } from '../services/api.service';
       border: 1px solid #DFE1E6;
       border-radius: 4px;
       font-size: 14px;
+    }
+    
+    .search-helper-text {
+      font-size: 12px;
+      color: #6B778C;
+      margin-top: 4px;
+      font-style: italic;
     }
     
     .clear-btn {

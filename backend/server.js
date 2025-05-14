@@ -203,6 +203,15 @@ app.post('/api/tasks', async (req, res) => {
             return res.status(400).json({ error: 'Title is required' });
         }
         
+        // Format the date to YYYY-MM-DD format if it exists
+        let formattedDueDate = null;
+        if (dueDate) {
+            // Parse the ISO date string and format it as YYYY-MM-DD
+            const date = new Date(dueDate);
+            formattedDueDate = date.toISOString().split('T')[0]; // Extract just the date part
+            console.log('Formatted due date:', formattedDueDate);
+        }
+        
         const [result] = await pool.query(
             `INSERT INTO tasks (
                 title, 
@@ -219,7 +228,7 @@ app.post('/api/tasks', async (req, res) => {
                 status || 'pending',
                 priority || 'medium',
                 assignee || null,
-                dueDate || null,
+                formattedDueDate,
                 userId || null
             ]
         );
@@ -246,9 +255,23 @@ app.get('/api/tasks', async (req, res) => {
         const filters = [];
         
         if (req.query.search) {
-            filters.push('(title LIKE ? OR description LIKE ?)');
-            const searchTerm = `%${req.query.search}%`;
-            queryParams.push(searchTerm, searchTerm);
+            // Check if search is numeric to potentially match an ID
+            const isNumeric = /^\d+$/.test(req.query.search);
+            
+            if (isNumeric) {
+                // If numeric, search by exact ID match or in title/description
+                filters.push('(id = ? OR title LIKE ? OR description LIKE ?)');
+                queryParams.push(
+                    parseInt(req.query.search), // Exact ID match
+                    `%${req.query.search}%`,   // Title contains
+                    `%${req.query.search}%`    // Description contains
+                );
+            } else {
+                // If not numeric, just search in title/description
+                filters.push('(title LIKE ? OR description LIKE ?)');
+                const searchTerm = `%${req.query.search}%`;
+                queryParams.push(searchTerm, searchTerm);
+            }
         }
         
         if (req.query.status) {
@@ -300,9 +323,23 @@ app.get('/api/tasks/user/:userId', async (req, res) => {
         const filters = [];
         
         if (req.query.search) {
-            filters.push('(title LIKE ? OR description LIKE ?)');
-            const searchTerm = `%${req.query.search}%`;
-            queryParams.push(searchTerm, searchTerm);
+            // Check if search is numeric to potentially match an ID
+            const isNumeric = /^\d+$/.test(req.query.search);
+            
+            if (isNumeric) {
+                // If numeric, search by exact ID match or in title/description
+                filters.push('(id = ? OR title LIKE ? OR description LIKE ?)');
+                queryParams.push(
+                    parseInt(req.query.search), // Exact ID match
+                    `%${req.query.search}%`,   // Title contains
+                    `%${req.query.search}%`    // Description contains
+                );
+            } else {
+                // If not numeric, just search in title/description
+                filters.push('(title LIKE ? OR description LIKE ?)');
+                const searchTerm = `%${req.query.search}%`;
+                queryParams.push(searchTerm, searchTerm);
+            }
         }
         
         if (req.query.status) {
@@ -340,6 +377,15 @@ app.put('/api/tasks/:id', async (req, res) => {
         const { title, description, status, priority, assignee, dueDate, userId } = req.body;
         console.log('Received task update request:', { id: req.params.id, ...req.body });
 
+        // Format the date to YYYY-MM-DD format if it exists
+        let formattedDueDate = null;
+        if (dueDate) {
+            // Parse the ISO date string and format it as YYYY-MM-DD
+            const date = new Date(dueDate);
+            formattedDueDate = date.toISOString().split('T')[0]; // Extract just the date part
+            console.log('Formatted due date:', formattedDueDate);
+        }
+        
         const [result] = await pool.query(
             `UPDATE tasks SET 
                 title = ?, 
@@ -356,7 +402,7 @@ app.put('/api/tasks/:id', async (req, res) => {
                 status || 'pending',
                 priority || 'medium',
                 assignee || null,
-                dueDate || null,
+                formattedDueDate,
                 userId || null,
                 req.params.id
             ]
@@ -413,7 +459,16 @@ app.patch('/api/tasks/:id', async (req, res) => {
 
         if (req.body.dueDate !== undefined) {
             updateFields.push('dueDate = ?');
-            updateValues.push(req.body.dueDate);
+            // Format the date to YYYY-MM-DD format if it's not null
+            if (req.body.dueDate) {
+                // Parse the ISO date string and format it as YYYY-MM-DD
+                const date = new Date(req.body.dueDate);
+                const formattedDueDate = date.toISOString().split('T')[0]; // Extract just the date part
+                console.log('Formatted due date in PATCH:', formattedDueDate);
+                updateValues.push(formattedDueDate);
+            } else {
+                updateValues.push(null);
+            }
         }
 
         if (req.body.userId !== undefined) {

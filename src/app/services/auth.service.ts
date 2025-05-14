@@ -64,4 +64,10 @@ export class AuthService {
   getCurrentUser(): User | null {
     return this.currentUserSubject.value;
   }
+  
+  // Check if the current user has admin rights
+  isAdmin(): boolean {
+    const currentUser = this.getCurrentUser();
+    return currentUser ? currentUser.role === 'admin' : false;
+  }
 }

@@ -273,6 +273,8 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   ngOnChanges() {
     // Reset the form whenever the task or visibility changes
     if (this.visible) {
+      console.log('Dialog visible, task input:', this.task);
+      console.log('Is edit mode:', this.isEditMode);
       this.resetForm();
     }
   }

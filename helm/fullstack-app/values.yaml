@@ -12,8 +12,8 @@ frontend:
   replicaCount: 1
   image:
     repository: localhost:32000/fullstack-app_frontend
-    tag: latest
-    pullPolicy: IfNotPresent
+    tag: v1.0.3
+    pullPolicy: Always
   service:
     type: ClusterIP
     port: 80
@@ -41,8 +41,8 @@ backend:
   replicaCount: 1
   image:
     repository: localhost:32000/fullstack-app_backend
-    tag: latest
-    pullPolicy: IfNotPresent
+    tag: v1.0.3
+    pullPolicy: Always
   service:
     type: ClusterIP
     port: 3000

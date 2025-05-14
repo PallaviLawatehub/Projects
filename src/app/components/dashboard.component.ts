@@ -1,8 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, AfterViewInit, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService, Task } from '../services/api.service';
+import { AuthService } from '../services/auth.service';
 import { Router } from '@angular/router';
+
+// We'll use Chart.js via CDN, so we need to declare the Chart global variable
+declare var Chart: any;
 
 @Component({
   selector: 'app-dashboard',
@@ -11,11 +15,22 @@ import { Router } from '@angular/router';
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss']
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, AfterViewInit {
+  @ViewChild('statusPieChart') statusPieChartRef!: ElementRef;
+  @ViewChild('priorityBarChart') priorityBarChartRef!: ElementRef;
+  
+  // Chart instances
+  private statusPieChart: any;
+  private priorityBarChart: any;
   tasks: Task[] = [];
+  filteredTasks: Task[] = [];
   tasksByStatus: { [key: string]: Task[] } = {};
   tasksByPriority: { [key: string]: Task[] } = {};
   tasksByAssignee: { [key: string]: Task[] } = {};
+  
+  // My Tasks toggle
+  showingMyTasks = false;
+  currentUser: any = null;
   
   statuses = ['pending', 'in_progress', 'blocked', 'completed'];
   priorities = ['low', 'medium', 'high', 'critical'];
@@ -36,18 +51,39 @@ export class DashboardComponent implements OnInit {
     dueDate: ''  
   };
   
-  constructor(private apiService: ApiService, private router: Router) {}
+  constructor(private apiService: ApiService, private router: Router, private authService: AuthService) {
+    // Get current user
+    this.currentUser = this.authService.getCurrentUser();
+  }
 
   ngOnInit() {
     this.loadTasks();
+    
+    // Add Chart.js script to the document
+    this.loadChartJsScript();
+  }
+  
+  ngAfterViewInit() {
+    // We'll initialize charts after view init and when Chart.js is loaded
+    this.initChartsWhenReady();
   }
 
   loadTasks() {
-    console.log('Loading tasks for dashboard...');
+    console.log('Loading tasks for dashboard...', this.showingMyTasks ? 'My Tasks' : 'All Tasks');
     this.apiService.getTasks().subscribe(
       tasks => {
-        console.log('Tasks loaded successfully:', tasks);
+        console.log('Tasks loaded successfully:', tasks.length);
         this.tasks = tasks;
+        
+        // If showing my tasks, filter by the current user's name as assignee
+        if (this.showingMyTasks && this.currentUser) {
+          console.log('Filtering tasks assigned to:', this.currentUser.name);
+          this.filteredTasks = this.tasks.filter(task => task.assignee === this.currentUser.name);
+          console.log(`Found ${this.filteredTasks.length} tasks assigned to ${this.currentUser.name}`);
+        } else {
+          this.filteredTasks = [...tasks]; // Set filtered tasks initially
+        }
+        
         this.analyzeTaskData();
       },
       error => {
@@ -67,11 +103,14 @@ export class DashboardComponent implements OnInit {
     this.statuses.forEach(status => this.tasksByStatus[status] = []);
     this.priorities.forEach(priority => this.tasksByPriority[priority] = []);
     
+    // Use filtered tasks instead of all tasks
+    const tasksToAnalyze = this.filteredTasks;
+    
     // Process tasks
-    this.totalTasks = this.tasks.length;
+    this.totalTasks = tasksToAnalyze.length;
     this.completedTasks = 0;
     
-    this.tasks.forEach(task => {
+    tasksToAnalyze.forEach(task => {
       // Group by status
       if (task.status) {
         if (!this.tasksByStatus[task.status]) {
@@ -103,10 +142,25 @@ export class DashboardComponent implements OnInit {
     
     // Calculate completion rate
     this.completionRate = this.totalTasks > 0 ? Math.round((this.completedTasks / this.totalTasks) * 100) : 0;
+    
+    // Update charts if they exist
+    this.updateCharts();
   }
   
   navigateToTaskList() {
     this.router.navigate(['/']);
+  }
+  
+  toggleMyTasks(): void {
+    this.showingMyTasks = !this.showingMyTasks;
+    console.log('My Tasks toggled:', this.showingMyTasks ? 'ON' : 'OFF');
+    
+    // Add visual feedback
+    if (this.showingMyTasks) {
+      alert('Showing only tasks assigned to you');
+    }
+    
+    this.loadTasks();
   }
   
   addTask() {
@@ -149,5 +203,175 @@ export class DashboardComponent implements OnInit {
   
   getPriorityPercentage(priority: string): number {
     return this.totalTasks > 0 ? Math.round((this.getTaskCountByPriority(priority) / this.totalTasks) * 100) : 0;
+  }
+  
+  /**
+   * Loads Chart.js script from CDN
+   */
+  private loadChartJsScript() {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+    script.async = true;
+    script.id = 'chartjs-script';
+    document.head.appendChild(script);
+  }
+  
+  /**
+   * Initializes charts when Chart.js is loaded
+   */
+  private initChartsWhenReady() {
+    const checkInterval = setInterval(() => {
+      if (typeof Chart !== 'undefined' && 
+          this.statusPieChartRef?.nativeElement && 
+          this.priorityBarChartRef?.nativeElement) {
+        clearInterval(checkInterval);
+        this.initCharts();
+      }
+    }, 100);
+    
+    // Safety timeout after 5 seconds
+    setTimeout(() => clearInterval(checkInterval), 5000);
+  }
+  
+  /**
+   * Initialize charts
+   */
+  private initCharts() {
+    this.initStatusPieChart();
+    this.initPriorityBarChart();
+  }
+  
+  /**
+   * Initialize status pie chart
+   */
+  private initStatusPieChart() {
+    const ctx = this.statusPieChartRef.nativeElement.getContext('2d');
+    
+    // Get data for the chart
+    const labels = this.statuses;
+    const data = labels.map(status => this.getTaskCountByStatus(status));
+    
+    // Define colors for each status
+    const backgroundColors = [
+      '#FF8B00', // pending
+      '#0052CC', // in_progress
+      '#DE350B', // blocked
+      '#36B37E'  // completed
+    ];
+    
+    this.statusPieChart = new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: labels.map(s => s.replace('_', ' ')).map(s => s.charAt(0).toUpperCase() + s.slice(1)),
+        datasets: [{
+          data: data,
+          backgroundColor: backgroundColors,
+          borderColor: '#fff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: {
+              padding: 20,
+              font: {
+                size: 12
+              }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                const label = context.label || '';
+                const value = context.raw || 0;
+                const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                const percentage = Math.round((value / total) * 100);
+                return `${label}: ${value} (${percentage}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+  
+  /**
+   * Initialize priority bar chart
+   */
+  private initPriorityBarChart() {
+    const ctx = this.priorityBarChartRef.nativeElement.getContext('2d');
+    
+    // Get data for the chart
+    const labels = this.priorities;
+    const data = labels.map(priority => this.getTaskCountByPriority(priority));
+    
+    // Define colors for each priority
+    const backgroundColors = [
+      '#00B8D9', // low
+      '#0052CC', // medium
+      '#FF8B00', // high
+      '#DE350B'  // critical
+    ];
+    
+    this.priorityBarChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels.map(p => p.charAt(0).toUpperCase() + p.slice(1)),
+        datasets: [{
+          label: 'Tasks by Priority',
+          data: data,
+          backgroundColor: backgroundColors,
+          borderColor: backgroundColors,
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              precision: 0
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                const label = context.dataset.label || '';
+                const value = context.raw || 0;
+                return `${label}: ${value}`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+  
+  /**
+   * Update charts with new data
+   */
+  private updateCharts() {
+    if (this.statusPieChart) {
+      const data = this.statuses.map(status => this.getTaskCountByStatus(status));
+      this.statusPieChart.data.datasets[0].data = data;
+      this.statusPieChart.update();
+    }
+    
+    if (this.priorityBarChart) {
+      const data = this.priorities.map(priority => this.getTaskCountByPriority(priority));
+      this.priorityBarChart.data.datasets[0].data = data;
+      this.priorityBarChart.update();
+    }
   }
 }

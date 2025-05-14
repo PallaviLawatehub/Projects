@@ -3,6 +3,9 @@
     <h2>Project Dashboard</h2>
     <div class="dashboard-actions">
       <button (click)="loadTasks()" class="refresh-btn">Refresh Data</button>
+      <button (click)="toggleMyTasks()" class="my-tasks-btn" [class.active]="showingMyTasks">
+        {{ showingMyTasks ? 'Show All Tasks' : 'My Tasks' }}
+      </button>
       <button (click)="navigateToTaskList()" class="board-btn">Go to Board</button>
     </div>
   </div>
@@ -37,38 +40,43 @@
   <!-- Status Distribution -->
   <div class="dashboard-section">
     <h3>Task Status Distribution</h3>
-    <div class="status-grid">
-      <div class="status-card pending">
-        <div class="status-icon">P</div>
-        <div class="status-info">
-          <div class="status-count">{{ getTaskCountByStatus('pending') }}</div>
-          <div class="status-name">Pending</div>
-          <div class="status-percent">{{ getStatusPercentage('pending') }}%</div>
+    <div class="charts-container">
+      <div class="status-grid">
+        <div class="status-card pending">
+          <div class="status-icon">P</div>
+          <div class="status-info">
+            <div class="status-count">{{ getTaskCountByStatus('pending') }}</div>
+            <div class="status-name">Pending</div>
+            <div class="status-percent">{{ getStatusPercentage('pending') }}%</div>
+          </div>
+        </div>
+        <div class="status-card in-progress">
+          <div class="status-icon">IP</div>
+          <div class="status-info">
+            <div class="status-count">{{ getTaskCountByStatus('in_progress') }}</div>
+            <div class="status-name">In Progress</div>
+            <div class="status-percent">{{ getStatusPercentage('in_progress') }}%</div>
+          </div>
+        </div>
+        <div class="status-card blocked">
+          <div class="status-icon">B</div>
+          <div class="status-info">
+            <div class="status-count">{{ getTaskCountByStatus('blocked') }}</div>
+            <div class="status-name">Blocked</div>
+            <div class="status-percent">{{ getStatusPercentage('blocked') }}%</div>
+          </div>
+        </div>
+        <div class="status-card completed">
+          <div class="status-icon">C</div>
+          <div class="status-info">
+            <div class="status-count">{{ getTaskCountByStatus('completed') }}</div>
+            <div class="status-name">Completed</div>
+            <div class="status-percent">{{ getStatusPercentage('completed') }}%</div>
+          </div>
         </div>
       </div>
-      <div class="status-card in-progress">
-        <div class="status-icon">IP</div>
-        <div class="status-info">
-          <div class="status-count">{{ getTaskCountByStatus('in_progress') }}</div>
-          <div class="status-name">In Progress</div>
-          <div class="status-percent">{{ getStatusPercentage('in_progress') }}%</div>
-        </div>
-      </div>
-      <div class="status-card blocked">
-        <div class="status-icon">B</div>
-        <div class="status-info">
-          <div class="status-count">{{ getTaskCountByStatus('blocked') }}</div>
-          <div class="status-name">Blocked</div>
-          <div class="status-percent">{{ getStatusPercentage('blocked') }}%</div>
-        </div>
-      </div>
-      <div class="status-card completed">
-        <div class="status-icon">C</div>
-        <div class="status-info">
-          <div class="status-count">{{ getTaskCountByStatus('completed') }}</div>
-          <div class="status-name">Completed</div>
-          <div class="status-percent">{{ getStatusPercentage('completed') }}%</div>
-        </div>
+      <div class="chart-container">
+        <canvas #statusPieChart width="300" height="300"></canvas>
       </div>
     </div>
   </div>
@@ -76,42 +84,47 @@
   <!-- Priority Distribution -->
   <div class="dashboard-section">
     <h3>Task Priority Distribution</h3>
-    <div class="priority-bars">
-      <div class="priority-item">
-        <div class="priority-label">
-          <span class="priority-tag low">Low</span>
-          <span class="priority-count">{{ getTaskCountByPriority('low') }}</span>
+    <div class="charts-container">
+      <div class="priority-bars">
+        <div class="priority-item">
+          <div class="priority-label">
+            <span class="priority-tag low">Low</span>
+            <span class="priority-count">{{ getTaskCountByPriority('low') }}</span>
+          </div>
+          <div class="priority-bar">
+            <div class="priority-fill low" [style.width.%]="getPriorityPercentage('low')"></div>
+          </div>
         </div>
-        <div class="priority-bar">
-          <div class="priority-fill low" [style.width.%]="getPriorityPercentage('low')"></div>
+        <div class="priority-item">
+          <div class="priority-label">
+            <span class="priority-tag medium">Medium</span>
+            <span class="priority-count">{{ getTaskCountByPriority('medium') }}</span>
+          </div>
+          <div class="priority-bar">
+            <div class="priority-fill medium" [style.width.%]="getPriorityPercentage('medium')"></div>
+          </div>
+        </div>
+        <div class="priority-item">
+          <div class="priority-label">
+            <span class="priority-tag high">High</span>
+            <span class="priority-count">{{ getTaskCountByPriority('high') }}</span>
+          </div>
+          <div class="priority-bar">
+            <div class="priority-fill high" [style.width.%]="getPriorityPercentage('high')"></div>
+          </div>
+        </div>
+        <div class="priority-item">
+          <div class="priority-label">
+            <span class="priority-tag critical">Critical</span>
+            <span class="priority-count">{{ getTaskCountByPriority('critical') }}</span>
+          </div>
+          <div class="priority-bar">
+            <div class="priority-fill critical" [style.width.%]="getPriorityPercentage('critical')"></div>
+          </div>
         </div>
       </div>
-      <div class="priority-item">
-        <div class="priority-label">
-          <span class="priority-tag medium">Medium</span>
-          <span class="priority-count">{{ getTaskCountByPriority('medium') }}</span>
-        </div>
-        <div class="priority-bar">
-          <div class="priority-fill medium" [style.width.%]="getPriorityPercentage('medium')"></div>
-        </div>
-      </div>
-      <div class="priority-item">
-        <div class="priority-label">
-          <span class="priority-tag high">High</span>
-          <span class="priority-count">{{ getTaskCountByPriority('high') }}</span>
-        </div>
-        <div class="priority-bar">
-          <div class="priority-fill high" [style.width.%]="getPriorityPercentage('high')"></div>
-        </div>
-      </div>
-      <div class="priority-item">
-        <div class="priority-label">
-          <span class="priority-tag critical">Critical</span>
-          <span class="priority-count">{{ getTaskCountByPriority('critical') }}</span>
-        </div>
-        <div class="priority-bar">
-          <div class="priority-fill critical" [style.width.%]="getPriorityPercentage('critical')"></div>
-        </div>
+      <div class="chart-container">
+        <canvas #priorityBarChart width="400" height="300"></canvas>
       </div>
     </div>
   </div>

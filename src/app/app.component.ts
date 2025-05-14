@@ -9,6 +9,7 @@ import { RouterOutlet, RouterLink } from '@angular/router';
     <nav class="navbar">
       <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
       <a routerLink="/" routerLinkActive="active">Task Board</a>
+      <a routerLink="/list-view" routerLinkActive="active">List View</a>
       <a routerLink="/about" routerLinkActive="active">About</a>
     </nav>
     <div class="container">

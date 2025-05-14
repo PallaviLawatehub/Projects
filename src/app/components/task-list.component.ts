@@ -28,11 +28,6 @@ import { environment } from '../../environments/environment';
             </div>
           </div>
           <div class="board-actions">
-            <button (click)="loadTasks()" class="refresh-btn">Refresh Tasks</button>
-            <button (click)="refreshUsers()" class="refresh-btn">Refresh Users</button>
-            <button (click)="toggleMyTasks()" class="my-tasks-btn" [class.active]="showingMyTasks">
-              {{ showingMyTasks ? 'Show All Tasks' : 'My Tasks' }}
-            </button>
             <button (click)="openCreateTaskDialog()" class="add-task-btn">Add Task</button>
           </div>
         </div>
@@ -70,7 +65,13 @@ import { environment } from '../../environments/environment';
                   <span class="avatar">{{ task.assignee.charAt(0) }}</span>
                   <span class="name">{{ task.assignee }}</span>
                 </div>
-                <div class="due-date" *ngIf="task.dueDate">
+                <div class="due-date" *ngIf="task.dueDate"
+                     [class.overdue]="isTaskOverdue(task)"
+                     [class.due-today]="isTaskDueToday(task)"
+                     [class.due-soon]="isTaskDueThisWeek(task) && !isTaskDueToday(task)">
+                  <span class="due-icon" *ngIf="isTaskOverdue(task)">⚠️</span>
+                  <span class="due-icon" *ngIf="isTaskDueToday(task)">⏰</span>
+                  <span class="due-icon" *ngIf="isTaskDueThisWeek(task) && !isTaskDueToday(task)">📅</span>
                   Due: {{ task.dueDate | date:'mediumDate' }}
                 </div>
               </div>
@@ -111,7 +112,13 @@ import { environment } from '../../environments/environment';
                   <span class="avatar">{{ task.assignee.charAt(0) }}</span>
                   <span class="name">{{ task.assignee }}</span>
                 </div>
-                <div class="due-date" *ngIf="task.dueDate">
+                <div class="due-date" *ngIf="task.dueDate"
+                     [class.overdue]="isTaskOverdue(task)"
+                     [class.due-today]="isTaskDueToday(task)"
+                     [class.due-soon]="isTaskDueThisWeek(task) && !isTaskDueToday(task)">
+                  <span class="due-icon" *ngIf="isTaskOverdue(task)">⚠️</span>
+                  <span class="due-icon" *ngIf="isTaskDueToday(task)">⏰</span>
+                  <span class="due-icon" *ngIf="isTaskDueThisWeek(task) && !isTaskDueToday(task)">📅</span>
                   Due: {{ task.dueDate | date:'mediumDate' }}
                 </div>
               </div>
@@ -152,7 +159,13 @@ import { environment } from '../../environments/environment';
                   <span class="avatar">{{ task.assignee.charAt(0) }}</span>
                   <span class="name">{{ task.assignee }}</span>
                 </div>
-                <div class="due-date" *ngIf="task.dueDate">
+                <div class="due-date" *ngIf="task.dueDate"
+                     [class.overdue]="isTaskOverdue(task)"
+                     [class.due-today]="isTaskDueToday(task)"
+                     [class.due-soon]="isTaskDueThisWeek(task) && !isTaskDueToday(task)">
+                  <span class="due-icon" *ngIf="isTaskOverdue(task)">⚠️</span>
+                  <span class="due-icon" *ngIf="isTaskDueToday(task)">⏰</span>
+                  <span class="due-icon" *ngIf="isTaskDueThisWeek(task) && !isTaskDueToday(task)">📅</span>
                   Due: {{ task.dueDate | date:'mediumDate' }}
                 </div>
               </div>
@@ -193,7 +206,13 @@ import { environment } from '../../environments/environment';
                   <span class="avatar">{{ task.assignee.charAt(0) }}</span>
                   <span class="name">{{ task.assignee }}</span>
                 </div>
-                <div class="due-date" *ngIf="task.dueDate">
+                <div class="due-date" *ngIf="task.dueDate"
+                     [class.overdue]="isTaskOverdue(task)"
+                     [class.due-today]="isTaskDueToday(task)"
+                     [class.due-soon]="isTaskDueThisWeek(task) && !isTaskDueToday(task)">
+                  <span class="due-icon" *ngIf="isTaskOverdue(task)">⚠️</span>
+                  <span class="due-icon" *ngIf="isTaskDueToday(task)">⏰</span>
+                  <span class="due-icon" *ngIf="isTaskDueThisWeek(task) && !isTaskDueToday(task)">📅</span>
                   Due: {{ task.dueDate | date:'mediumDate' }}
                 </div>
               </div>
@@ -665,26 +684,27 @@ import { environment } from '../../environments/environment';
   `]
 })
 export class TaskListComponent implements OnInit, OnDestroy {
+  // Properties for task management
   tasks: Task[] = [];
   filteredTasks: Task[] = [];
+  selectedTask: Task | null = null;
+  isEditMode = false;
+  showTaskDialog = false;
+  showAddTaskForm = false;
+  currentUser: any = null; // Using any type to avoid conflicts between auth and api User interfaces
+  users: string[] = []; // Store user names as strings
+  userObjects: any[] = []; // Store full user objects
+  dbUsers: any[] = []; // For backward compatibility
+  showingMyTasks = false;
   private routerSubscription: Subscription | undefined;
   private userSubscription: Subscription | undefined;
   
-  statuses = ['pending', 'in_progress', 'blocked', 'completed'];
-  priorities = ['low', 'medium', 'high', 'critical'];
-  users: string[] = [];
-  dbUsers: User[] = [];
-  
-  showAddTaskForm = false;
-  showingMyTasks = false;
-  currentUser: any = null;
-  
-  // Task dialog properties
-  showTaskDialog = false;
-  isEditMode = false;
-  selectedTask: Task | null = null;
-  
-  // Current filters
+  // Filter properties
+  statusFilter: string = '';
+  searchQuery: string = '';
+  priorityFilter: string = ''; // New priority filter
+  dueFilter: string = ''; // Due date filter
+  assigneeFilter: string = ''; // Assignee filter
   currentFilters: any = {
     search: '',
     status: '',
@@ -692,6 +712,25 @@ export class TaskListComponent implements OnInit, OnDestroy {
     assignee: ''
   };
   
+  // Task statistics
+  taskStats = {
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    blocked: 0,
+    completed: 0,
+    overdue: 0
+  };
+  
+  // Due date reminder settings
+  showDueDateReminders = true;
+  reminderThresholdDays = 2; // Show reminders for tasks due within 2 days
+  
+  // Task statuses and priorities
+  statuses = ['pending', 'in_progress', 'blocked', 'completed'];
+  priorities = ['low', 'medium', 'high', 'critical'];
+  
+  // New task template
   newTask: Task = {
     title: '',
     description: '',
@@ -700,13 +739,13 @@ export class TaskListComponent implements OnInit, OnDestroy {
     assignee: '',
     dueDate: ''
   };
-
+  
   constructor(
-    private apiService: ApiService, 
-    private authService: AuthService,
+    private apiService: ApiService,
+    public authService: AuthService,
     private router: Router
   ) {}
-
+  
   ngOnInit() {
     // Load users from the database
     this.loadUsers();
@@ -784,37 +823,36 @@ export class TaskListComponent implements OnInit, OnDestroy {
       this.showingMyTasks = false;
     }
     
-    if (this.showingMyTasks) {
-      // Load only tasks for the current user
-      console.log('Loading my tasks with filters:', this.currentFilters);
-      this.apiService.getUserTasks(this.currentFilters).subscribe(
-        (tasks: Task[]) => {
-          console.log('User tasks loaded:', tasks.length);
-          this.tasks = tasks;
+    // Load all tasks with current filters
+    console.log('Loading all tasks with filters:', this.currentFilters);
+    this.apiService.getTasks(this.currentFilters).subscribe(
+      (tasks: Task[]) => {
+        console.log('All tasks loaded:', tasks.length);
+        this.tasks = tasks;
+        
+        // If showing my tasks, filter by the current user's name as assignee
+        if (this.showingMyTasks && this.currentUser) {
+          const currentUser = this.authService.getCurrentUser();
+          console.log('Filtering tasks assigned to:', currentUser?.name);
+          console.log('Filtering tasks assigned to:', this.currentUser.name);
+          // Filter tasks where the assignee exactly matches the current user's name
+          this.filteredTasks = this.tasks.filter(task => {
+            // Check if the assignee is exactly the current user's name
+            // This handles cases like 'John Doe' vs just 'John'
+            return task.assignee === currentUser?.name;
+          });
+          console.log(`Found ${this.filteredTasks.length} tasks assigned to ${this.currentUser.name}`);
+        } else {
           this.filteredTasks = [...tasks]; // Set filtered tasks initially
-          this.applyCurrentFilters(); // Apply any additional filters
-        },
-        (error: any) => {
-          console.error('Error loading user tasks:', error);
-          alert('Failed to load your tasks. Please try again.');
         }
-      );
-    } else {
-      // Load all tasks with current filters
-      console.log('Loading all tasks with filters:', this.currentFilters);
-      this.apiService.getTasks(this.currentFilters).subscribe(
-        (tasks: Task[]) => {
-          console.log('All tasks loaded:', tasks.length);
-          this.tasks = tasks;
-          this.filteredTasks = [...tasks]; // Set filtered tasks initially
-          this.applyCurrentFilters(); // Apply any additional filters
-        },
-        (error: any) => {
-          console.error('Error loading tasks:', error);
-          alert('Failed to load tasks. Please try again.');
-        }
-      );
-    }
+        
+        this.applyCurrentFilters(); // Apply any additional filters
+      },
+      (error: any) => {
+        console.error('Error loading tasks:', error);
+        alert('Failed to load tasks. Please try again.');
+      }
+    );
   }
   
   // Apply current filters to the tasks list
@@ -826,13 +864,94 @@ export class TaskListComponent implements OnInit, OnDestroy {
     
     // Apply search filter if present
     if (this.currentFilters.search) {
-      const searchTerm = this.currentFilters.search.toLowerCase();
-      filtered = filtered.filter((task: Task) => 
-        task.title.toLowerCase().includes(searchTerm) || 
-        (task.description && task.description.toLowerCase().includes(searchTerm))
-      );
+      // Clean the search term - remove # if present for ID searches
+      let searchTerm = this.currentFilters.search.toLowerCase().trim();
+      // Remove # prefix if searching for task ID
+      if (searchTerm.startsWith('#')) {
+        searchTerm = searchTerm.substring(1);
+      }
+      
+      // Try to parse as number for ID searches
+      const searchTermAsNumber = parseInt(searchTerm);
+      const isSearchingById = !isNaN(searchTermAsNumber);
+      
+      console.log('Search term:', searchTerm, 'Is searching by ID:', isSearchingById, 'Number value:', searchTermAsNumber);
+      
+      // If searching by exact ID, try to fetch that specific task first
+      if (isSearchingById && searchTerm === searchTermAsNumber.toString()) {
+        console.log('Attempting direct task ID search for ID:', searchTermAsNumber);
+        
+        // First check if the task is already in our local array
+        const existingTask = this.tasks.find(t => t.id === searchTermAsNumber);
+        if (existingTask) {
+          console.log('Found task by ID in local array:', existingTask);
+          this.filteredTasks = [existingTask];
+          this.updateTaskStatistics();
+          return;
+        }
+        
+        // If not found locally, try to fetch from API
+        this.apiService.getTaskById(searchTermAsNumber).subscribe({
+          next: (task) => {
+            console.log('Found task by ID from API:', task);
+            // Add to tasks array if not already there
+            if (!this.tasks.some(t => t.id === task.id)) {
+              this.tasks.push(task);
+            }
+            this.filteredTasks = [task];
+            this.updateTaskStatistics();
+          },
+          error: (error) => {
+            console.error('Error fetching task by ID:', error);
+            // Continue with normal filtering if direct fetch fails
+            this.performNormalFiltering(filtered, searchTerm, searchTermAsNumber, isSearchingById);
+          }
+        });
+        return;
+      }
+      
+      // For non-exact ID searches or text searches, use normal filtering
+      this.performNormalFiltering(filtered, searchTerm, searchTermAsNumber, isSearchingById);
+    } else {
+      // No search term, apply other filters
+      this.applyOtherFilters(filtered);
     }
+  }
+  
+  // Helper method to perform normal filtering
+  private performNormalFiltering(filtered: Task[], searchTerm: string, searchTermAsNumber: number, isSearchingById: boolean): void {
+    filtered = filtered.filter((task: Task) => {
+      // Search by task ID - exact match if the search term is a number
+      if (isSearchingById && task.id === searchTermAsNumber) {
+        console.log('Found task by ID exact match:', task);
+        return true;
+      }
+      
+      // Search by task ID as substring
+      if (task.id !== undefined && task.id.toString().includes(searchTerm)) {
+        console.log('Found task by ID substring match:', task);
+        return true;
+      }
+      
+      // Search by title
+      if (task.title && task.title.toLowerCase().includes(searchTerm)) {
+        return true;
+      }
+      
+      // Search by description
+      if (task.description && task.description.toLowerCase().includes(searchTerm)) {
+        return true;
+      }
+      
+      return false;
+    });
     
+    // Apply other filters
+    this.applyOtherFilters(filtered);
+  }
+  
+  // Helper method to apply non-search filters
+  private applyOtherFilters(filtered: Task[]): void {
     // Apply status filter if present
     if (this.currentFilters.status) {
       filtered = filtered.filter((task: Task) => task.status === this.currentFilters.status);
@@ -848,9 +967,66 @@ export class TaskListComponent implements OnInit, OnDestroy {
       filtered = filtered.filter((task: Task) => task.assignee === this.currentFilters.assignee);
     }
     
+    // Apply due date filter if present
+    if (this.dueFilter) {
+      filtered = filtered.filter((task: Task) => {
+        switch (this.dueFilter) {
+          case 'overdue':
+            return this.isTaskOverdue(task);
+          case 'today':
+            return this.isTaskDueToday(task);
+          case 'this_week':
+            return this.isTaskDueThisWeek(task);
+          default:
+            return true;
+        }
+      });
+    }
+    
     // Update filtered tasks
     this.filteredTasks = filtered;
     console.log('Filtered tasks:', this.filteredTasks.length);
+    
+    // Update task statistics
+    this.updateTaskStatistics();
+  }
+  
+  // Update task statistics based on all tasks
+  updateTaskStatistics(): void {
+    // Reset statistics
+    this.taskStats = {
+      total: this.tasks.length,
+      pending: 0,
+      inProgress: 0,
+      blocked: 0,
+      completed: 0,
+      overdue: 0
+    };
+    
+    // Count tasks by status
+    this.tasks.forEach(task => {
+      switch (task.status) {
+        case 'pending':
+          this.taskStats.pending++;
+          break;
+        case 'in_progress':
+          this.taskStats.inProgress++;
+          break;
+        case 'blocked':
+          this.taskStats.blocked++;
+          break;
+        case 'completed':
+          this.taskStats.completed++;
+          break;
+      }
+      
+      // Count overdue tasks (not completed and past due date)
+      if (task.status !== 'completed' && this.isTaskOverdue(task)) {
+        this.taskStats.overdue++;
+      }
+    });
+    
+    console.log('Task statistics updated:', this.taskStats);
   }
   
   // Refresh users from the database
@@ -867,7 +1043,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     
     // Add visual feedback
     if (this.showingMyTasks) {
-      alert('Showing only tasks assigned to you or created by you');
+      alert('Showing only tasks assigned to you');
     }
     
     this.loadTasks();
@@ -888,6 +1064,48 @@ export class TaskListComponent implements OnInit, OnDestroy {
     return this.filteredTasks.filter((task: Task) => task.status === status);
   }
 
+  // Check if a task is overdue (due date is in the past)  
+  isTaskOverdue(task: Task): boolean {
+    if (!task.dueDate) return false;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to beginning of day for accurate comparison
+    
+    const dueDate = new Date(task.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+    
+    return dueDate < today;
+  }
+  
+  // Check if a task is due today
+  isTaskDueToday(task: Task): boolean {
+    if (!task.dueDate) return false;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const dueDate = new Date(task.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+    
+    return dueDate.getTime() === today.getTime();
+  }
+  
+  // Check if a task is due within the next week
+  isTaskDueThisWeek(task: Task): boolean {
+    if (!task.dueDate) return false;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+    
+    const dueDate = new Date(task.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+    
+    return dueDate >= today && dueDate <= nextWeek;
+  }
+  
   updateStatus(taskId: number, event: Event): void {
     if (!event || !event.target) return;
     
@@ -950,6 +1168,12 @@ export class TaskListComponent implements OnInit, OnDestroy {
   }
 
   deleteTask(taskId: number): void {
+    // Check if the current user is an admin
+    if (!this.authService.isAdmin()) {
+      alert('Only administrators can delete tasks.');
+      return;
+    }
+
     if (confirm('Are you sure you want to delete this task?')) {
       console.log(`Deleting task ${taskId}`);
       this.apiService.deleteTask(taskId).subscribe(
@@ -979,47 +1203,240 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.selectedTask = task;
     this.showTaskDialog = true;
   }
-  
   closeTaskDialog(): void {
     this.showTaskDialog = false;
   }
-  
+
+  /**
+   * Updates an existing task with API call first, then local fallback
+   * @param task The task to update
+   */
+  updateExistingTask(task: Task): void {
+    if (!task || !task.id) {
+      console.error('Cannot update task: Invalid task or missing ID');
+      alert('Cannot update task: Missing task ID');
+      return;
+    }
+    
+    console.log('Updating task with ID:', task.id);
+    
+    // Create a clean copy of the task to avoid reference issues
+    const updatedTask: Task = {
+      id: task.id,
+      title: task.title?.trim() || '',
+      description: task.description?.trim() || '',
+      status: task.status || 'pending',
+      priority: task.priority || 'medium',
+      assignee: task.assignee || '',
+      dueDate: task.dueDate || ''
+    };
+    
+    // Preserve the userId if it exists
+    if (task.userId) {
+      updatedTask.userId = task.userId;
+    }
+    
+    // Add created_at if it doesn't exist
+    if (!updatedTask.created_at) {
+      updatedTask.created_at = new Date().toISOString();
+    }
+    
+    // Show a loading message
+    const loadingMessage = document.createElement('div');
+    loadingMessage.textContent = 'Updating task...';
+    loadingMessage.style.position = 'fixed';
+    loadingMessage.style.top = '50%';
+    loadingMessage.style.left = '50%';
+    loadingMessage.style.transform = 'translate(-50%, -50%)';
+    loadingMessage.style.padding = '10px 20px';
+    loadingMessage.style.backgroundColor = '#f0f0f0';
+    loadingMessage.style.border = '1px solid #ccc';
+    loadingMessage.style.borderRadius = '4px';
+    loadingMessage.style.zIndex = '9999';
+    document.body.appendChild(loadingMessage);
+    
+    // First try to update via API
+    this.apiService.updateTask(updatedTask).subscribe({
+      next: (serverUpdatedTask: Task) => {
+        console.log('Task updated successfully on server:', serverUpdatedTask);
+        
+        // Update the task in the local arrays with the server response
+        this.updateLocalTaskArrays(serverUpdatedTask);
+        
+        // Remove loading message
+        document.body.removeChild(loadingMessage);
+        
+        // Close the dialog
+        this.closeTaskDialog();
+        
+        // Show success message
+        alert('Task updated successfully on server!');
+      },
+      error: (error: any) => {
+        console.error('Error updating task on server:', error);
+        console.log('Falling back to local update...');
+        
+        // Update locally as fallback
+        try {
+          // Update the task in the local arrays
+          this.updateLocalTaskArrays(updatedTask);
+          
+          // Remove loading message
+          document.body.removeChild(loadingMessage);
+          
+          // Close the dialog
+          this.closeTaskDialog();
+          
+          // Show success message with warning
+          alert('Task updated locally only. Changes will not persist after page refresh.');
+          
+          console.log('Task updated locally as fallback:', updatedTask);
+        } catch (localError) {
+          // Remove loading message
+          document.body.removeChild(loadingMessage);
+          
+          // Show error message
+          alert('Failed to update task: ' + (localError instanceof Error ? localError.message : 'Unknown error'));
+          console.error('Error in local task update:', localError);
+        }
+      }
+    });
+  }
+
+  /**
+   * Updates task in local arrays without requiring a full reload from the server
+   * @param updatedTask The updated task from the API
+   */
+  updateLocalTaskArrays(updatedTask: Task): void {
+    if (!updatedTask || !updatedTask.id) return;
+    
+    // Find and update in the main tasks array
+    const taskIndex = this.tasks.findIndex(t => t.id === updatedTask.id);
+    if (taskIndex !== -1) {
+      this.tasks[taskIndex] = updatedTask;
+    }
+    
+    // Also update in filteredTasks if it exists there
+    const filteredIndex = this.filteredTasks.findIndex(t => t.id === updatedTask.id);
+    if (filteredIndex !== -1) {
+      this.filteredTasks[filteredIndex] = updatedTask;
+    }
+    
+    // Update task statistics
+    this.updateTaskStatistics();
+  }
+
+  /**
+   * Saves a task (creates new or updates existing) with API call first, then local fallback
+   * @param task The task to save
+   */
   saveTask(task: Task): void {
     console.log('Saving task:', task, 'isEditMode:', this.isEditMode);
     
-    // Make sure we have the task ID from the selected task if we're in edit mode
     if (this.isEditMode && this.selectedTask && this.selectedTask.id) {
       // Ensure the task has the correct ID from the selected task
       task.id = this.selectedTask.id;
-      console.log('Updating existing task with ID:', task.id);
       
-      // Update existing task - let the API service handle the formatting
-      this.apiService.updateTask(task).subscribe(
-        (updatedTask: Task) => {
-          console.log('Task updated successfully:', updatedTask);
-          
-          // Force reload tasks to ensure we have the latest data
-          this.loadTasks();
-          this.closeTaskDialog();
-        },
-        (error: any) => {
-          console.error('Error updating task:', error);
-          alert('Failed to update task. Please check the console for details.');
-        }
-      );
+      // Call our update method
+      this.updateExistingTask(task);
     } else {
-      // Create new task
-      this.apiService.createTask(task).subscribe(
-        (createdTask: Task) => {
-          console.log('Task created successfully:', createdTask);
-          this.loadTasks();
+      // Show a loading message
+      const loadingMessage = document.createElement('div');
+      loadingMessage.textContent = 'Creating task...';
+      loadingMessage.style.position = 'fixed';
+      loadingMessage.style.top = '50%';
+      loadingMessage.style.left = '50%';
+      loadingMessage.style.transform = 'translate(-50%, -50%)';
+      loadingMessage.style.padding = '10px 20px';
+      loadingMessage.style.backgroundColor = '#f0f0f0';
+      loadingMessage.style.border = '1px solid #ccc';
+      loadingMessage.style.borderRadius = '4px';
+      loadingMessage.style.zIndex = '9999';
+      document.body.appendChild(loadingMessage);
+      
+      // Prepare the task data
+      const newTask: Task = {
+        title: task.title?.trim() || '',
+        description: task.description?.trim() || '',
+        status: task.status || 'pending',
+        priority: task.priority || 'medium',
+        assignee: task.assignee || '',
+        dueDate: task.dueDate || ''
+      };
+      
+      // First try to create via API
+      this.apiService.createTask(newTask).subscribe({
+        next: (serverCreatedTask: Task) => {
+          console.log('Task created successfully on server:', serverCreatedTask);
+          
+          // Add the new task to our local arrays
+          this.tasks.push(serverCreatedTask);
+          this.filteredTasks.push(serverCreatedTask);
+          
+          // Update statistics
+          this.updateTaskStatistics();
+          
+          // Remove loading message
+          document.body.removeChild(loadingMessage);
+          
+          // Close the dialog
           this.closeTaskDialog();
+          
+          // Show success message
+          alert('Task created successfully on server!');
         },
-        (error: any) => {
-          console.error('Error creating task:', error);
-          alert('Failed to create task. Please check the console for details.');
+        error: (error: any) => {
+          console.error('Error creating task on server:', error);
+          console.log('Falling back to local task creation...');
+          
+          // Create locally as fallback
+          try {
+            // Create a new task locally
+            const createdTask: Task = {
+              id: Math.floor(Math.random() * 10000) + 1, // Generate a random ID
+              title: newTask.title,
+              description: newTask.description,
+              status: newTask.status,
+              priority: newTask.priority,
+              assignee: newTask.assignee,
+              dueDate: newTask.dueDate,
+              created_at: new Date().toISOString()
+            };
+            
+            // Add userId if available
+            const currentUser = this.authService.getCurrentUser();
+            if (currentUser) {
+              createdTask.userId = currentUser.id;
+            }
+            
+            console.log('Task created locally as fallback:', createdTask);
+            
+            // Add the new task to our local arrays
+            this.tasks.push(createdTask);
+            this.filteredTasks.push(createdTask);
+            
+            // Update statistics
+            this.updateTaskStatistics();
+            
+            // Remove loading message
+            document.body.removeChild(loadingMessage);
+            
+            // Close the dialog
+            this.closeTaskDialog();
+            
+            // Show success message with warning
+            alert('Task created locally only. Changes will not persist after page refresh.');
+          } catch (localError) {
+            // Remove loading message
+            document.body.removeChild(loadingMessage);
+            
+            // Show error message
+            alert('Failed to create task: ' + (localError instanceof Error ? localError.message : 'Unknown error'));
+            console.error('Error in local task creation:', localError);
+          }
         }
-      );
+      });
     }
   }
+
 }
