@@ -147,8 +147,30 @@ export class DashboardComponent implements OnInit, AfterViewInit {
     this.updateCharts();
   }
   
-  navigateToTaskList() {
-    this.router.navigate(['/']);
+  /**
+   * Navigate to task list view with optional status filter
+   * @param status Optional status to filter by
+   */
+  navigateToTaskList(status?: string) {
+    if (status) {
+      // Navigate with query params to set the status filter
+      this.router.navigate(['/list-view'], { queryParams: { status } });
+    } else {
+      // Navigate to task list without filters
+      this.router.navigate(['/list-view']);
+    }
+  }
+  
+  /**
+   * Navigate to task list view with task ID filter
+   * @param taskId The ID of the task to filter by
+   */
+  navigateToTaskById(taskId: number | undefined) {
+    if (taskId !== undefined) {
+      console.log('Navigating to task with ID:', taskId);
+      // Navigate with query params to set the task ID filter
+      this.router.navigate(['/list-view'], { queryParams: { taskId } });
+    }
   }
   
   toggleMyTasks(): void {

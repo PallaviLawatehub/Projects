@@ -4,14 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, Task, User } from '../services/api.service';
 
 @Component({
-  selector: 'app-task-dialog',
+  selector: 'app-subtask-dialog',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
     <div class="dialog-overlay" *ngIf="visible" (click)="onOverlayClick($event)">
       <div class="dialog-container">
         <div class="dialog-header">
-          <h3>{{ isEditMode ? 'Edit Task' : 'Create New Task' }}</h3>
+          <h3>Create Subtask for #{{parentTask?.id}}: {{parentTask?.title}}</h3>
           <button class="close-btn" (click)="onClose()">×</button>
         </div>
         
@@ -21,9 +21,9 @@ import { ApiService, Task, User } from '../services/api.service';
             <input 
               type="text" 
               id="title" 
-              [(ngModel)]="taskData.title" 
+              [(ngModel)]="subtaskData.title" 
               required
-              placeholder="Enter task title"
+              placeholder="Enter subtask title"
             >
           </div>
           
@@ -31,17 +31,17 @@ import { ApiService, Task, User } from '../services/api.service';
             <label for="description">Description*</label>
             <textarea 
               id="description" 
-              [(ngModel)]="taskData.description" 
+              [(ngModel)]="subtaskData.description" 
               required
               rows="3"
-              placeholder="Enter task description"
+              placeholder="Enter subtask description"
             ></textarea>
           </div>
           
           <div class="form-row">
             <div class="form-group half-width">
               <label for="status">Status</label>
-              <select id="status" [(ngModel)]="taskData.status">
+              <select id="status" [(ngModel)]="subtaskData.status">
                 <option *ngFor="let status of statuses" [value]="status">
                   {{ status | titlecase }}
                 </option>
@@ -50,7 +50,7 @@ import { ApiService, Task, User } from '../services/api.service';
             
             <div class="form-group half-width">
               <label for="priority">Priority</label>
-              <select id="priority" [(ngModel)]="taskData.priority">
+              <select id="priority" [(ngModel)]="subtaskData.priority">
                 <option *ngFor="let priority of priorities" [value]="priority">
                   {{ priority | titlecase }}
                 </option>
@@ -60,23 +60,8 @@ import { ApiService, Task, User } from '../services/api.service';
           
           <div class="form-row">
             <div class="form-group half-width">
-              <label for="task_type">Task Type</label>
-              <select id="task_type" [(ngModel)]="taskData.task_type">
-                <option *ngFor="let type of taskTypes" [value]="type">
-                  {{ type | titlecase }}
-                </option>
-              </select>
-            </div>
-            
-            <div class="form-group half-width">
-              <!-- Placeholder for layout balance -->
-            </div>
-          </div>
-          
-          <div class="form-row">
-            <div class="form-group half-width">
               <label for="assignee">Assignee</label>
-              <select id="assignee" [(ngModel)]="taskData.assignee">
+              <select id="assignee" [(ngModel)]="subtaskData.assignee">
                 <option value="">Unassigned</option>
                 <option *ngFor="let user of users" [value]="user">{{ user }}</option>
               </select>
@@ -87,28 +72,39 @@ import { ApiService, Task, User } from '../services/api.service';
               <input 
                 type="date" 
                 id="dueDate" 
-                [(ngModel)]="taskData.dueDate"
+                [(ngModel)]="subtaskData.dueDate"
               >
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Relationship</label>
+            <div class="relationship-display">
+              <div class="parent-task">
+                <span class="task-type {{ parentTask?.task_type || 'task' }}">
+                  {{ parentTask?.task_type || 'Task' | titlecase }}
+                </span>
+                <span class="task-id">#{{ parentTask?.id }}</span>
+                <span class="task-title">{{ parentTask?.title }}</span>
+              </div>
+              <div class="relationship-arrow">↓</div>
+              <div class="subtask">
+                <span class="task-type subtask">Subtask</span>
+                <span class="task-title">{{ subtaskData.title || 'New Subtask' }}</span>
+              </div>
             </div>
           </div>
         </div>
         
         <div class="dialog-footer">
-          <div class="footer-left" *ngIf="isEditMode">
-            <button class="subtask-btn" (click)="onCreateSubtask()" *ngIf="task?.task_type !== 'subtask'">
-              <span class="subtask-icon">📎</span> Create Subtask
-            </button>
-          </div>
-          <div class="footer-right">
-            <button class="cancel-btn" (click)="onClose()">Cancel</button>
-            <button 
-              class="save-btn" 
-              [disabled]="!isFormValid()" 
-              (click)="onSave()"
-            >
-              {{ isEditMode ? 'Update' : 'Create' }}
-            </button>
-          </div>
+          <button class="cancel-btn" (click)="onClose()">Cancel</button>
+          <button 
+            class="save-btn" 
+            [disabled]="!isFormValid()" 
+            (click)="onSave()"
+          >
+            Create Subtask
+          </button>
         </div>
       </div>
     </div>
@@ -200,40 +196,10 @@ import { ApiService, Task, User } from '../services/api.service';
     
     .dialog-footer {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
+      gap: 12px;
       padding: 16px 20px;
       border-top: 1px solid #DFE1E6;
-    }
-    
-    .footer-left {
-      display: flex;
-      align-items: center;
-    }
-    
-    .footer-right {
-      display: flex;
-      gap: 12px;
-    }
-    
-    .subtask-btn {
-      padding: 8px 16px;
-      background-color: #EAE6FF;
-      border: 1px solid #C0B6F2;
-      border-radius: 4px;
-      color: #403294;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 500;
-    }
-    
-    .subtask-btn:hover {
-      background-color: #D6CBFF;
-    }
-    
-    .subtask-icon {
-      font-size: 16px;
     }
     
     .cancel-btn {
@@ -262,29 +228,98 @@ import { ApiService, Task, User } from '../services/api.service';
       background-color: #C1C7D0;
       cursor: not-allowed;
     }
+    
+    .relationship-display {
+      background-color: #F4F5F7;
+      border-radius: 4px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .parent-task, .subtask {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background-color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      width: 100%;
+    }
+    
+    .relationship-arrow {
+      font-size: 24px;
+      color: #6B778C;
+    }
+    
+    .task-type {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.8rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+    
+    .task-type.story {
+      background-color: #E3FCEF;
+      color: #006644;
+    }
+    
+    .task-type.bug {
+      background-color: #FFEBE6;
+      color: #DE350B;
+    }
+    
+    .task-type.task {
+      background-color: #DEEBFF;
+      color: #0052CC;
+    }
+    
+    .task-type.epic {
+      background-color: #EAE6FF;
+      color: #403294;
+    }
+    
+    .task-type.subtask {
+      background-color: #F4F5F7;
+      color: #42526E;
+    }
+    
+    .task-id {
+      color: #6B778C;
+      font-size: 0.9rem;
+    }
+    
+    .task-title {
+      font-weight: 500;
+      color: #172B4D;
+      flex: 1;
+    }
   `]
 })
-export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
+export class SubtaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   @Input() visible = false;
-  @Input() isEditMode = false;
-  @Input() task: Task | null = null;
+  @Input() parentTask: Task | null = null;
   
   @Output() close = new EventEmitter<void>();
   @Output() save = new EventEmitter<Task>();
-  @Output() createSubtask = new EventEmitter<Task>();
   
-  taskData: Task = {
+  subtaskData: Task = {
     title: '',
     description: '',
     status: 'pending',
     priority: 'medium',
+    task_type: 'subtask',
     assignee: '',
     dueDate: ''
   };
   
   statuses = ['pending', 'in_progress', 'blocked', 'completed'];
   priorities = ['low', 'medium', 'high', 'critical'];
-  taskTypes = ['story', 'bug', 'task', 'epic', 'subtask'];
   users: string[] = [];
   dbUsers: User[] = [];
   
@@ -299,7 +334,7 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
     
     // Add event listener for refreshing users
     this.refreshUsersListener = () => {
-      console.log('Received refreshUsers event in dialog');
+      console.log('Received refreshUsers event in subtask dialog');
       this.loadUsers();
     };
     window.addEventListener('refreshUsers', this.refreshUsersListener);
@@ -307,16 +342,16 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   
   // Load users from the database
   loadUsers() {
-    console.log('Loading users in dialog component...');
+    console.log('Loading users in subtask dialog component...');
     this.apiService.getUsers().subscribe(
       users => {
-        console.log('Users loaded successfully in dialog:', users);
+        console.log('Users loaded successfully in subtask dialog:', users);
         this.dbUsers = users;
         // Extract user names for the dropdown
         this.users = users.map(user => user.name);
       },
       error => {
-        console.error('Error loading users in dialog:', error);
+        console.error('Error loading users in subtask dialog:', error);
         // Fallback to default users if API fails
         this.users = ['John Doe', 'Jane Smith', 'Alex Johnson', 'Sam Wilson'];
       }
@@ -324,11 +359,10 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   }
   
   // Add OnChanges to detect when inputs change
-  ngOnChanges() {
+  ngOnChanges(changes: SimpleChanges) {
     // Reset the form whenever the task or visibility changes
     if (this.visible) {
-      console.log('Dialog visible, task input:', this.task);
-      console.log('Is edit mode:', this.isEditMode);
+      console.log('Subtask dialog visible, parent task:', this.parentTask);
       this.resetForm();
     }
   }
@@ -342,68 +376,55 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   }
   
   resetForm() {
-    if (this.isEditMode && this.task) {
-      // Clone the task for editing
-      this.taskData = { 
-        ...this.task,
-        // Ensure task_type is set when editing
-        task_type: this.task.task_type || 'story'
-      };
-      console.log('Editing task with type:', this.taskData.task_type);
-    } else {
-      // Reset to defaults for new task
-      this.taskData = {
-        title: '',
-        description: '',
-        status: 'pending',
-        priority: 'medium',
-        task_type: 'story',
-        assignee: '',
-        dueDate: ''
-      };
+    // Reset to defaults for new subtask
+    this.subtaskData = {
+      title: '',
+      description: '',
+      status: 'pending',
+      priority: 'medium',
+      task_type: 'subtask',
+      assignee: '',
+      dueDate: '',
+      parentId: this.parentTask?.id
+    };
+    
+    // If parent task has an assignee, use the same assignee for the subtask by default
+    if (this.parentTask?.assignee) {
+      this.subtaskData.assignee = this.parentTask.assignee;
     }
   }
   
   isFormValid(): boolean {
-    return !!this.taskData.title && !!this.taskData.description;
+    return !!this.subtaskData.title && !!this.subtaskData.description;
   }
   
   onSave() {
-    if (this.isFormValid()) {
-      // Log the current task data before saving
-      console.log('Current task data before save:', this.taskData);
-      console.log('Task type before save:', this.taskData.task_type);
+    if (this.isFormValid() && this.parentTask?.id) {
+      // Log the current subtask data before saving
+      console.log('Current subtask data before save:', this.subtaskData);
       
       // Ensure we're sending a properly formatted task object
       // Make a clean copy to avoid reference issues
-      const taskToSave: Task = {
-        ...this.taskData,
-        // Preserve the ID for updates
-        id: this.taskData.id,
+      const subtaskToSave: Task = {
+        ...this.subtaskData,
         // Ensure strings are trimmed
-        title: this.taskData.title.trim(),
-        description: this.taskData.description.trim(),
+        title: this.subtaskData.title.trim(),
+        description: this.subtaskData.description.trim(),
         // Ensure other fields have proper values
-        status: this.taskData.status || 'pending',
-        priority: this.taskData.priority || 'medium',
-        task_type: this.taskData.task_type || 'story'
+        status: this.subtaskData.status || 'pending',
+        priority: this.subtaskData.priority || 'medium',
+        task_type: 'subtask', // Always set to subtask
+        // Set parent ID
+        parentId: this.parentTask.id
       };
       
-      console.log('Task dialog emitting save with task:', taskToSave);
-      console.log('Task type being saved:', taskToSave.task_type);
-      this.save.emit(taskToSave);
+      console.log('Subtask dialog emitting save with subtask:', subtaskToSave);
+      this.save.emit(subtaskToSave);
     }
   }
   
   onClose() {
     this.close.emit();
-  }
-  
-  onCreateSubtask() {
-    if (this.task && this.task.id) {
-      console.log('Creating subtask for task:', this.task);
-      this.createSubtask.emit(this.task);
-    }
   }
   
   onOverlayClick(event: MouseEvent) {

@@ -9,6 +9,8 @@ export interface User {
   id: number;
   name: string;
   email: string;
+  username?: string;
+  password?: string; // Optional for existing users, required for new users
   role: 'user' | 'admin';
   created_at?: string;
 }
@@ -19,10 +21,12 @@ export interface Task {
   description: string;
   status?: 'pending' | 'in_progress' | 'completed' | 'blocked';
   priority?: 'low' | 'medium' | 'high' | 'critical';
+  task_type?: 'story' | 'bug' | 'task' | 'epic' | 'subtask';
   assignee?: string;
   dueDate?: string;
   created_at?: string;
   userId?: number; // Owner of the task
+  parentId?: number; // Parent task ID for subtasks
 }
 
 @Injectable({
@@ -111,6 +115,14 @@ export class ApiService {
       task.userId = currentUser.id;
     }
     
+    // Ensure task_type is set
+    if (!task.task_type) {
+      console.log('Task type not set, defaulting to "task"');
+      task.task_type = 'story';
+    } else {
+      console.log('Task type set to:', task.task_type);
+    }
+    
     // Use the correct backend URL
     const apiPath = this.getBackendUrl('tasks');
     console.log('Creating task at:', apiPath, 'with data:', JSON.stringify(task));
@@ -147,6 +159,7 @@ export class ApiService {
       description: task.description?.trim() || '',
       status: task.status || 'pending',
       priority: task.priority || 'medium',
+      task_type: task.task_type || 'story',
       assignee: task.assignee || '',
       dueDate: task.dueDate || ''
     };
@@ -211,6 +224,7 @@ export class ApiService {
             description: task.description?.trim() || '',
             status: task.status || 'pending',
             priority: task.priority || 'medium',
+            task_type: task.task_type || 'story',
             assignee: task.assignee || '',
             dueDate: task.dueDate || '',
             userId: task.userId || null
@@ -251,6 +265,8 @@ export class ApiService {
     return this.http.delete<any>(apiPath);
   }
   
+  // This method was removed to avoid duplication with the one below
+  
   // Search tasks
   searchTasks(searchTerm: string): Observable<Task[]> {
     return this.getTasks({ search: searchTerm });
@@ -272,21 +288,87 @@ export class ApiService {
   
   // Get all users
   getUsers(): Observable<User[]> {
-    // Fix for API URL path construction
-    const apiPath = environment.production ? 
-      `${this.apiUrl}/users` : 
-      `${this.apiUrl}/api/users`;
+    // Use the correct backend URL
+    const apiPath = this.getBackendUrl('users');
+    console.log('Getting all users from:', apiPath);
     
     return this.http.get<User[]>(apiPath);
   }
   
   // Get user by ID
   getUser(id: number): Observable<User> {
-    // Fix for API URL path construction
-    const apiPath = environment.production ? 
-      `${this.apiUrl}/users/${id}` : 
-      `${this.apiUrl}/api/users/${id}`;
+    // Use the correct backend URL
+    const apiPath = this.getBackendUrl(`users/${id}`);
+    console.log('Getting user by ID from:', apiPath);
     
     return this.http.get<User>(apiPath);
+  }
+  
+  // Create a new user (admin function)
+  createUser(user: User): Observable<any> {
+    // Use the correct backend URL
+    const apiPath = this.getBackendUrl('register');
+    console.log('Creating user at:', apiPath);
+    
+    // Send a POST request
+    return this.http.post<any>(apiPath, user);
+  }
+  
+  // Update user (admin function)
+  updateUser(id: number, user: User): Observable<any> {
+    // Use the correct backend URL
+    const apiPath = this.getBackendUrl(`users/${id}`);
+    console.log('Updating user at:', apiPath);
+    
+    // Send a PUT request
+    return this.http.put<any>(apiPath, user);
+  }
+  
+  // Delete user (admin function)
+  deleteUser(id: number): Observable<any> {
+    // Use the correct backend URL
+    const apiPath = this.getBackendUrl(`users/${id}`);
+    console.log('Deleting user at:', apiPath);
+    
+    // Send a DELETE request
+    return this.http.delete<any>(apiPath);
+  }
+  
+  /**
+   * Triggers a cleanup of completed tasks based on retention period
+   * @param retention The number value for the retention period
+   * @param unit The unit of time for the retention period ('days', 'minutes', or 'hours')
+   * @returns Observable with cleanup result
+   */
+  cleanupCompletedTasks(retention: number, unit: 'days' | 'minutes' | 'hours' = 'days'): Observable<any> {
+    // Try the new endpoint first
+    const apiPath = this.getBackendUrl('tasks/cleanup');
+    console.log(`Triggering task cleanup at: ${apiPath} (${retention} ${unit})`);
+    
+    // Send a POST request with parameters in both formats to support both endpoints
+    return this.http.post<any>(apiPath, { 
+      retention, // For admin/cleanup-tasks endpoint
+      unit,      // For admin/cleanup-tasks endpoint
+      retentionValue: retention, // For tasks/cleanup endpoint
+      timeUnit: unit  // For tasks/cleanup endpoint
+    }).pipe(
+      catchError(error => {
+        console.error('Error cleaning up tasks:', error);
+        // Try the admin endpoint as fallback
+        const adminApiPath = this.getBackendUrl('admin/cleanup-tasks');
+        console.log(`Fallback: Triggering task cleanup at: ${adminApiPath} (${retention} ${unit})`);
+        return this.http.post<any>(adminApiPath, { retention, unit });
+      })
+    )
+  }
+  
+  // Configure minute-based cleanup settings (admin function)
+  configureMinuteCleanup(minutes: number, enabled: boolean): Observable<any> {
+    // Use the correct backend URL
+    const apiPath = this.getBackendUrl('admin/configure-minute-cleanup');
+    console.log(`Configuring minute-based cleanup at: ${apiPath} (${minutes} minutes, enabled: ${enabled})`);
+    
+    // Send a POST request with minutes and enabled flag
+    return this.http.post<any>(apiPath, { minutes, enabled });
   }
 }

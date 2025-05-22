@@ -7,12 +7,13 @@ import { Router, NavigationEnd } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TaskFilterComponent } from './task-filter.component';
 import { TaskDialogComponent } from './task-dialog.component';
+import { SubtaskDialogComponent } from './subtask-dialog.component';
 import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-task-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, TaskFilterComponent, TaskDialogComponent],
+  imports: [CommonModule, FormsModule, TaskFilterComponent, TaskDialogComponent, SubtaskDialogComponent],
   template: `
     <div class="task-board">
       <!-- Fixed header section that doesn't scroll -->
@@ -27,7 +28,7 @@ import { environment } from '../../environments/environment';
               <button (click)="logout()" class="logout-btn">Logout</button>
             </div>
           </div>
-          <div class="board-actions">
+          <div class="board-actions">           
             <button (click)="openCreateTaskDialog()" class="add-task-btn">Add Task</button>
           </div>
         </div>
@@ -40,7 +41,8 @@ import { environment } from '../../environments/environment';
       
       <!-- Scrollable content section -->
       <div class="scrollable-content">
-        <div class="board-columns">
+        <!-- Kanban Board View -->
+        <div class="board-columns" *ngIf="viewMode === 'kanban'">
         <!-- Pending Column -->
         <div class="column pending-column">
           <div class="column-header">
@@ -50,7 +52,13 @@ import { environment } from '../../environments/environment';
           <div class="column-content">
             <div class="task-card" *ngFor="let task of getTasksByStatus('pending')" (click)="this.selectedTask = (this.selectedTask && this.selectedTask.id === task.id) ? null : task" [class.selected]="selectedTask && selectedTask.id === task.id">
               <div class="task-card-header">
-                <span class="task-id">#{{ task.id }}</span>
+                <div class="task-id-type">
+                  <span class="task-id">#{{ task.id }}</span>
+                  <span class="task-type {{ task.task_type || 'story' }}">
+                    <span class="type-icon">{{ getTaskTypeIcon(task.task_type) }}</span>
+                    {{ task.task_type || 'story' | titlecase }}
+                  </span>
+                </div>
                 <div class="header-right">
                   <span class="priority {{ task.priority }}">{{ task.priority | titlecase }}</span>
                   <button class="card-edit-btn" (click)="openEditTaskDialog(task); $event.stopPropagation()">
@@ -97,7 +105,13 @@ import { environment } from '../../environments/environment';
           <div class="column-content">
             <div class="task-card" *ngFor="let task of getTasksByStatus('in_progress')" (click)="this.selectedTask = (this.selectedTask && this.selectedTask.id === task.id) ? null : task" [class.selected]="selectedTask && selectedTask.id === task.id">
               <div class="task-card-header">
-                <span class="task-id">#{{ task.id }}</span>
+                <div class="task-id-type">
+                  <span class="task-id">#{{ task.id }}</span>
+                  <span class="task-type {{ task.task_type || 'story' }}">
+                    <span class="type-icon">{{ getTaskTypeIcon(task.task_type) }}</span>
+                    {{ task.task_type || 'story' | titlecase }}
+                  </span>
+                </div>
                 <div class="header-right">
                   <span class="priority {{ task.priority }}">{{ task.priority | titlecase }}</span>
                   <button class="card-edit-btn" (click)="openEditTaskDialog(task); $event.stopPropagation()">
@@ -144,7 +158,13 @@ import { environment } from '../../environments/environment';
           <div class="column-content">
             <div class="task-card" *ngFor="let task of getTasksByStatus('blocked')" (click)="this.selectedTask = (this.selectedTask && this.selectedTask.id === task.id) ? null : task" [class.selected]="selectedTask && selectedTask.id === task.id">
               <div class="task-card-header">
-                <span class="task-id">#{{ task.id }}</span>
+                <div class="task-id-type">
+                  <span class="task-id">#{{ task.id }}</span>
+                  <span class="task-type {{ task.task_type || 'story' }}">
+                    <span class="type-icon">{{ getTaskTypeIcon(task.task_type) }}</span>
+                    {{ task.task_type || 'story' | titlecase }}
+                  </span>
+                </div>
                 <div class="header-right">
                   <span class="priority {{ task.priority }}">{{ task.priority | titlecase }}</span>
                   <button class="card-edit-btn" (click)="openEditTaskDialog(task); $event.stopPropagation()">
@@ -191,7 +211,13 @@ import { environment } from '../../environments/environment';
           <div class="column-content">
             <div class="task-card" *ngFor="let task of getTasksByStatus('completed')" (click)="this.selectedTask = (this.selectedTask && this.selectedTask.id === task.id) ? null : task" [class.selected]="selectedTask && selectedTask.id === task.id">
               <div class="task-card-header">
-                <span class="task-id">#{{ task.id }}</span>
+                <div class="task-id-type">
+                  <span class="task-id">#{{ task.id }}</span>
+                  <span class="task-type {{ task.task_type || 'story' }}">
+                    <span class="type-icon">{{ getTaskTypeIcon(task.task_type) }}</span>
+                    {{ task.task_type || 'story' | titlecase }}
+                  </span>
+                </div>
                 <div class="header-right">
                   <span class="priority {{ task.priority }}">{{ task.priority | titlecase }}</span>
                   <button class="card-edit-btn" (click)="openEditTaskDialog(task); $event.stopPropagation()">
@@ -238,10 +264,89 @@ import { environment } from '../../environments/environment';
         [task]="selectedTask"
         (close)="closeTaskDialog()"
         (save)="saveTask($event)"
+        (createSubtask)="openSubtaskDialog($event)"
       ></app-task-dialog>
+      
+      <!-- Subtask Dialog Component -->
+      <app-subtask-dialog
+        [visible]="showSubtaskDialog"
+        [parentTask]="parentTask"
+        (close)="closeSubtaskDialog()"
+        (save)="saveSubtask($event)"
+      ></app-subtask-dialog>
     </div>
   `,
   styles: [`
+    /* Task Type Styles */
+    .task-id-type {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .task-type {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.8rem;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 500;
+      margin-left: 4px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    
+    .task-type.story {
+      background-color: #E3FCEF;
+      color: #006644;
+    }
+    
+    .task-type.bug {
+      background-color: #FFEBE6;
+      color: #DE350B;
+    }
+    .task-type.task {
+      background-color: #DEEBFF;
+      color: #0052CC;
+    }
+    .task-type.epic {
+      background-color: #EAE6FF;
+      color: #403294;
+    }
+    .task-type.subtask {
+      background-color: #F4F5F7;
+      color: #42526E;
+    }
+    
+    .parent-link {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.75rem;
+      margin-left: 8px;
+      padding: 2px 6px;
+      background-color: #F4F5F7;
+      border-radius: 3px;
+      color: #42526E;
+      border: 1px dashed #DFE1E6;
+    }
+    
+    .link-icon {
+      margin-right: 4px;
+    }
+    
+    .subtask-indicator {
+      margin-top: 8px;
+      padding: 4px 8px;
+      background-color: #EAE6FF;
+      border-radius: 3px;
+      font-size: 0.8rem;
+      color: #403294;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .type-icon {
+      font-size: 1rem;
+    }
     .task-board {
       width: 100%;
       height: calc(100vh - 70px); /* Subtract navbar height */
@@ -276,6 +381,44 @@ import { environment } from '../../environments/environment';
       margin-bottom: 0; /* Remove margin to avoid gap */
       z-index: 150;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .board-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    
+    .view-toggle {
+      display: flex;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #DFE1E6;
+    }
+    
+    .view-toggle-btn {
+      padding: 8px 12px;
+      background-color: white;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #42526E;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    
+    .view-toggle-btn:hover {
+      background-color: #F4F5F7;
+    }
+    
+    .view-toggle-btn.active {
+      background-color: #DEEBFF;
+      color: #0052CC;
+    }
+    
+    .toggle-icon {
+      font-size: 16px;
     }
     .board-title {
       display: flex;
@@ -690,6 +833,9 @@ export class TaskListComponent implements OnInit, OnDestroy {
   selectedTask: Task | null = null;
   isEditMode = false;
   showTaskDialog = false;
+  showSubtaskDialog = false;
+  parentTask: Task | null = null;
+  viewMode: 'kanban' | 'list' | 'table' = 'kanban'; // Default to kanban view
   showAddTaskForm = false;
   currentUser: any = null; // Using any type to avoid conflicts between auth and api User interfaces
   users: string[] = []; // Store user names as strings
@@ -943,11 +1089,21 @@ export class TaskListComponent implements OnInit, OnDestroy {
         return true;
       }
       
+      // Search by task type
+      if (task.task_type && task.task_type.toLowerCase().includes(searchTerm)) {
+        console.log('Found task by task type match:', task);
+        return true;
+      }
+      
       return false;
     });
     
-    // Apply other filters
-    this.applyOtherFilters(filtered);
+    // Update filtered tasks
+    this.filteredTasks = filtered;
+    console.log('Filtered tasks:', this.filteredTasks.length);
+    
+    // Update task statistics
+    this.updateTaskStatistics();
   }
   
   // Helper method to apply non-search filters
@@ -960,6 +1116,11 @@ export class TaskListComponent implements OnInit, OnDestroy {
     // Apply priority filter if present
     if (this.currentFilters.priority) {
       filtered = filtered.filter((task: Task) => task.priority === this.currentFilters.priority);
+    }
+    
+    // Apply task type filter if present
+    if (this.currentFilters.task_type) {
+      filtered = filtered.filter((task: Task) => task.task_type === this.currentFilters.task_type);
     }
     
     // Apply assignee filter if present
@@ -1054,7 +1215,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.currentFilters = filters;
     this.loadTasks();
   }
-  
+
   logout(): void {
     this.authService.logout();
     // Navigation to login will happen automatically due to the auth guard
@@ -1063,11 +1224,41 @@ export class TaskListComponent implements OnInit, OnDestroy {
   getTasksByStatus(status: string): Task[] {
     return this.filteredTasks.filter((task: Task) => task.status === status);
   }
+  
+  getTaskTypeIcon(type: string | undefined): string {
+    switch (type) {
+      case 'story': return '📝'; // Document icon for story
+      case 'bug': return '🐞'; // Bug icon for bug
+      case 'epic': return '🏆'; // Trophy icon for epic
+      case 'subtask': return '📎'; // Paperclip icon for subtask
+      case 'task':
+      default: return '✓'; // Checkmark icon for task
+    }
+  }
+  
+  // Find a parent task by ID
+  getParentTask(parentId: number | undefined): Task | undefined {
+    if (!parentId) return undefined;
+    return this.tasks.find(task => task.id === parentId);
+  }
+  
+  // Get subtasks for a parent task
+  getSubtasks(parentId: number | undefined): Task[] {
+    if (!parentId) return [];
+    return this.tasks.filter(task => task.parentId === parentId);
+  }
+  
+  // Check if a task has subtasks
+  hasSubtasks(taskId: number | undefined): boolean {
+    if (!taskId) return false;
+    return this.tasks.some(task => task.parentId === taskId);
+  }
 
   // Check if a task is overdue (due date is in the past)  
   isTaskOverdue(task: Task): boolean {
     if (!task.dueDate) return false;
     
+  // Check if a task is overdue (due date is in the past)
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Set to beginning of day for accurate comparison
     
@@ -1206,6 +1397,87 @@ export class TaskListComponent implements OnInit, OnDestroy {
   closeTaskDialog(): void {
     this.showTaskDialog = false;
   }
+  
+  // Subtask dialog methods
+  openSubtaskDialog(parentTask: Task): void {
+    this.parentTask = parentTask;
+    this.showSubtaskDialog = true;
+    this.showTaskDialog = false; // Close the task dialog
+  }
+  
+  closeSubtaskDialog(): void {
+    this.showSubtaskDialog = false;
+    this.parentTask = null;
+  }
+  
+  saveSubtask(subtaskData: Task): void {
+    console.log('Saving subtask:', subtaskData);
+    console.log('Parent task:', this.parentTask);
+    
+    if (!this.parentTask || !this.parentTask.id) {
+      console.error('Cannot create subtask: Missing parent task ID');
+      alert('Error: Cannot create subtask without a parent task');
+      return;
+    }
+    
+    // Show a loading message
+    const loadingMessage = document.createElement('div');
+    loadingMessage.textContent = 'Creating subtask...';
+    loadingMessage.style.position = 'fixed';
+    loadingMessage.style.top = '50%';
+    loadingMessage.style.left = '50%';
+    loadingMessage.style.transform = 'translate(-50%, -50%)';
+    loadingMessage.style.padding = '10px 20px';
+    loadingMessage.style.backgroundColor = '#f0f0f0';
+    loadingMessage.style.border = '1px solid #ccc';
+    loadingMessage.style.borderRadius = '4px';
+    loadingMessage.style.zIndex = '9999';
+    document.body.appendChild(loadingMessage);
+    
+    // Prepare the subtask data
+    const newSubtask: Task = {
+      title: subtaskData.title?.trim() || '',
+      description: subtaskData.description?.trim() || '',
+      status: subtaskData.status || 'pending',
+      priority: subtaskData.priority || 'medium',
+      task_type: 'subtask', // Always set to subtask
+      assignee: subtaskData.assignee || '',
+      dueDate: subtaskData.dueDate || '',
+      parentId: this.parentTask.id // Set the parent ID
+    };
+    
+    // Create the subtask via API
+    this.apiService.createTask(newSubtask).subscribe({
+      next: (createdSubtask: Task) => {
+        console.log('Subtask created successfully:', createdSubtask);
+        
+        // Add the new subtask to our local arrays
+        this.tasks.push(createdSubtask);
+        this.filteredTasks.push(createdSubtask);
+        
+        // Update statistics
+        this.updateTaskStatistics();
+        
+        // Remove loading message
+        document.body.removeChild(loadingMessage);
+        
+        // Close the dialog
+        this.closeSubtaskDialog();
+        
+        // Show success message
+        alert('Subtask created successfully!');
+      },
+      error: (error: any) => {
+        console.error('Error creating subtask:', error);
+        
+        // Remove loading message
+        document.body.removeChild(loadingMessage);
+        
+        // Show error message
+        alert('Failed to create subtask: ' + (error.message || 'Unknown error'));
+      }
+    });
+  }
 
   /**
    * Updates an existing task with API call first, then local fallback
@@ -1227,6 +1499,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
       description: task.description?.trim() || '',
       status: task.status || 'pending',
       priority: task.priority || 'medium',
+      task_type: task.task_type || 'story',
       assignee: task.assignee || '',
       dueDate: task.dueDate || ''
     };
@@ -1330,15 +1603,16 @@ export class TaskListComponent implements OnInit, OnDestroy {
    * Saves a task (creates new or updates existing) with API call first, then local fallback
    * @param task The task to save
    */
-  saveTask(task: Task): void {
-    console.log('Saving task:', task, 'isEditMode:', this.isEditMode);
+  saveTask(taskData: any): void {
+    console.log('Saving task:', taskData, 'isEditMode:', this.isEditMode);
+    console.log('Task type from dialog:', taskData.task_type);
     
     if (this.isEditMode && this.selectedTask && this.selectedTask.id) {
       // Ensure the task has the correct ID from the selected task
-      task.id = this.selectedTask.id;
+      taskData.id = this.selectedTask.id;
       
       // Call our update method
-      this.updateExistingTask(task);
+      this.updateExistingTask(taskData);
     } else {
       // Show a loading message
       const loadingMessage = document.createElement('div');
@@ -1356,12 +1630,13 @@ export class TaskListComponent implements OnInit, OnDestroy {
       
       // Prepare the task data
       const newTask: Task = {
-        title: task.title?.trim() || '',
-        description: task.description?.trim() || '',
-        status: task.status || 'pending',
-        priority: task.priority || 'medium',
-        assignee: task.assignee || '',
-        dueDate: task.dueDate || ''
+        title: taskData.title?.trim() || '',
+        description: taskData.description?.trim() || '',
+        status: taskData.status || 'pending',
+        priority: taskData.priority || 'medium',
+        task_type: taskData.task_type || 'story',
+        assignee: taskData.assignee || '',
+        dueDate: taskData.dueDate || ''
       };
       
       // First try to create via API
@@ -1398,6 +1673,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
               description: newTask.description,
               status: newTask.status,
               priority: newTask.priority,
+              task_type: newTask.task_type,
               assignee: newTask.assignee,
               dueDate: newTask.dueDate,
               created_at: new Date().toISOString()

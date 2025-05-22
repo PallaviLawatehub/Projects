@@ -1,14 +1,16 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild, AfterViewInit, inject, Injector } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService, Task } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
 import { TaskFilterComponent } from './task-filter.component';
+import { TaskTypeDisplayComponent } from './task-type-display.component';
+import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
   selector: 'app-task-list-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, TaskFilterComponent],
+  imports: [CommonModule, FormsModule, TaskFilterComponent, TaskTypeDisplayComponent],
   template: `
     <div class="task-list-view">
       <!-- Header section -->
@@ -55,12 +57,16 @@ import { TaskFilterComponent } from './task-filter.component';
               <th>Description</th>
               <th>Status</th>
               <th>Priority</th>
+              <th>Task Type</th>
               <th>Assignee</th>
               <th>Due Date</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let task of filteredTasks" [class.overdue]="isTaskOverdue(task)" [class.due-today]="isTaskDueToday(task)">
+            <tr *ngFor="let task of filteredTasks" 
+                [class.overdue]="isTaskOverdue(task)" 
+                [class.due-today]="isTaskDueToday(task)"
+                [class.highlighted-task]="currentFilters.taskId && task.id !== undefined && task.id.toString() === currentFilters.taskId.toString()">
               <td>{{ task.id }}</td>
               <td>{{ task.title }}</td>
               <td class="description-cell">{{ task.description }}</td>
@@ -69,6 +75,9 @@ import { TaskFilterComponent } from './task-filter.component';
               </td>
               <td>
                 <span class="priority-badge {{ task.priority }}">{{ task.priority | titlecase }}</span>
+              </td>
+              <td>
+                <app-task-type-display [taskType]="task.task_type" [parentId]="task.parentId"></app-task-type-display>
               </td>
               <td>{{ task.assignee }}</td>
               <td>{{ task.dueDate | date:'mediumDate' }}</td>
@@ -331,6 +340,18 @@ import { TaskFilterComponent } from './task-filter.component';
     tr.due-today {
       background-color: #fff8e1;
     }
+    
+    tr.highlighted-task {
+      background-color: #E3FCEF; /* Light green background */
+      font-weight: 600;
+      animation: highlight-pulse 2s ease-in-out 3;
+    }
+    
+    @keyframes highlight-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(54, 179, 126, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(54, 179, 126, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(54, 179, 126, 0); }
+    }
   `]
 })
 export class TaskListViewComponent implements OnInit {
@@ -341,13 +362,41 @@ export class TaskListViewComponent implements OnInit {
   showImportPanel = false;
   importData = '';
 
+  // Reference to the filter component to set filters programmatically
+  @ViewChild(TaskFilterComponent) filterComponent!: TaskFilterComponent;
+  
   constructor(
     private apiService: ApiService,
-    private authService: AuthService
+    private authService: AuthService,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit(): void {
+    // Check for query parameters (status filter or taskId from dashboard)
+    this.route.queryParams.subscribe(params => {
+      // Reset current filters
+      this.currentFilters = {};
+      
+      // If we have a status parameter, store it for when the filter component is ready
+      if (params['status']) {
+        console.log('Received status filter from URL:', params['status']);
+        this.currentFilters.status = params['status'];
+      }
+      
+      // If we have a taskId parameter, store it for filtering
+      if (params['taskId']) {
+        console.log('Received task ID filter from URL:', params['taskId']);
+        this.currentFilters.taskId = params['taskId'];
+      }
+    });
+    
+    // Load tasks
     this.loadTasks();
+    
+    // Set a timeout to ensure the filter component is available
+    setTimeout(() => {
+      this.updateFilterComponentFromQueryParams();
+    }, 500); // Give it some time to initialize
   }
 
   loadTasks(): void {
@@ -358,35 +407,99 @@ export class TaskListViewComponent implements OnInit {
       this.showingMyTasks = false;
     }
     
+    // Check for URL parameters again to ensure we preserve them on refresh
+    this.route.queryParams.subscribe(params => {
+      // If we have a status parameter, preserve it
+      if (params['status'] && !this.currentFilters.status) {
+        console.log('Preserving status filter from URL:', params['status']);
+        this.currentFilters.status = params['status'];
+      }
+      
+      // If we have a taskId parameter, preserve it
+      if (params['taskId'] && !this.currentFilters.taskId) {
+        console.log('Preserving task ID filter from URL:', params['taskId']);
+        this.currentFilters.taskId = params['taskId'];
+      }
+    }).unsubscribe(); // Unsubscribe immediately to avoid memory leaks
+    
     // Load all tasks with current filters
     console.log('Loading all tasks with filters:', this.currentFilters);
-    this.apiService.getTasks(this.currentFilters).subscribe(
-      (tasks: Task[]) => {
-        console.log('All tasks loaded:', tasks.length);
+    
+    this.apiService.getTasks().subscribe(
+      tasks => {
+        console.log('All tasks loaded successfully:', tasks.length);
         this.tasks = tasks;
-        
-        // If showing my tasks, filter by the current user's name as assignee
-        if (this.showingMyTasks && this.authService.getCurrentUser()) {
-          const currentUser = this.authService.getCurrentUser();
-          console.log('Filtering tasks assigned to:', currentUser?.name);
-          
-          // Filter tasks where the assignee exactly matches the current user's name
-          this.filteredTasks = this.tasks.filter(task => {
-            // Check if the assignee is exactly the current user's name
-            return task.assignee === currentUser?.name;
-          });
-          console.log(`Found ${this.filteredTasks.length} tasks assigned to ${currentUser?.name}`);
-        } else {
-          this.filteredTasks = [...tasks]; // Set filtered tasks initially
-        }
-        
-        this.applyCurrentFilters(); // Apply any additional filters
+        this.filteredTasks = [...tasks]; // Initialize filtered tasks
+        this.applyCurrentFilters(); // Apply any filters
+        this.updateFilterComponentFromQueryParams();
       },
-      (error: any) => {
-        console.error('Error loading tasks:', error);
-        alert('Failed to load tasks. Please try again.');
+      error => {
+        console.error('Error loading all tasks:', error);
+        alert('Failed to load tasks. Please check the console for details.');
       }
     );
+  }
+  
+  /**
+   * Updates the filter component with values from URL query parameters
+   * This is called after tasks are loaded to ensure the filter component is ready
+   */
+  private updateFilterComponentFromQueryParams(): void {
+    console.log('Attempting to update filter component from query params');
+    
+    // If filter component is not available yet, retry after a delay
+    if (!this.filterComponent) {
+      console.log('Filter component not available yet, retrying in 300ms');
+      setTimeout(() => this.updateFilterComponentFromQueryParams(), 300);
+      return;
+    }
+    
+    // Flag to track if we need to trigger filter change event
+    let filtersUpdated = false;
+    
+    // Apply status filter if present in URL params
+    if (this.currentFilters && this.currentFilters.status) {
+      console.log('Setting filter component status to:', this.currentFilters.status);
+      this.filterComponent.statusFilter = this.currentFilters.status;
+      filtersUpdated = true;
+    }
+    
+    // Apply priority filter if present
+    if (this.currentFilters && this.currentFilters.priority) {
+      console.log('Setting filter component priority to:', this.currentFilters.priority);
+      this.filterComponent.priorityFilter = this.currentFilters.priority;
+      filtersUpdated = true;
+    }
+    
+    // Apply assignee filter if present
+    if (this.currentFilters && this.currentFilters.assignee) {
+      console.log('Setting filter component assignee to:', this.currentFilters.assignee);
+      this.filterComponent.assigneeFilter = this.currentFilters.assignee;
+      filtersUpdated = true;
+    }
+    
+    // Apply task type filter if present
+    if (this.currentFilters && this.currentFilters.task_type) {
+      console.log('Setting filter component task type to:', this.currentFilters.task_type);
+      this.filterComponent.taskTypeFilter = this.currentFilters.task_type;
+      filtersUpdated = true;
+    }
+    
+    // Apply search filter if present
+    if (this.currentFilters && this.currentFilters.search) {
+      console.log('Setting filter component search to:', this.currentFilters.search);
+      this.filterComponent.searchTerm = this.currentFilters.search;
+      filtersUpdated = true;
+    }
+    
+    // Trigger filter change event if any filters were updated
+    if (filtersUpdated) {
+      console.log('Triggering filter change event');
+      this.filterComponent.onFilterChange();
+      
+      // Apply the filters to the task list
+      this.applyCurrentFilters();
+    }
   }
 
   toggleMyTasks(): void {
@@ -402,43 +515,125 @@ export class TaskListViewComponent implements OnInit {
   }
 
   applyFilters(filters: any): void {
-    console.log('Applying filters:', filters);
+    console.log('Applying filters from filter component:', filters);
+    
+    // Preserve taskId filter if it exists (from URL parameters)
+    const taskId = this.currentFilters.taskId;
+    
+    // Update current filters with new filters from the filter component
     this.currentFilters = filters;
-    this.loadTasks();
+    
+    // Restore taskId filter if it was present
+    if (taskId) {
+      this.currentFilters.taskId = taskId;
+    }
+    
+    // Update URL parameters to reflect the current filters
+    this.updateUrlWithFilters();
+    
+    // Apply filters to the current tasks without reloading from API
+    this.applyCurrentFilters();
+  }
+  
+  /**
+   * Updates the URL with the current filters to maintain state
+   * This allows for bookmarking and sharing filtered views
+   */
+  private updateUrlWithFilters(): void {
+    // Create query params object from current filters
+    const queryParams: any = {};
+    
+    // Only add non-empty filters to the URL
+    if (this.currentFilters.status) queryParams.status = this.currentFilters.status;
+    if (this.currentFilters.priority) queryParams.priority = this.currentFilters.priority;
+    if (this.currentFilters.assignee) queryParams.assignee = this.currentFilters.assignee;
+    if (this.currentFilters.task_type) queryParams.task_type = this.currentFilters.task_type;
+    if (this.currentFilters.taskId) queryParams.taskId = this.currentFilters.taskId;
+    // Don't include search in URL as it's typically temporary
+    
+    // Update URL without reloading the page
+    this.route.queryParams.pipe().subscribe(() => {
+      // Use Router to update the URL
+      import('@angular/router').then(router => {
+        const injector = inject(Injector);
+        const routerService = injector.get(router.Router);
+        
+        // Update URL with new query params, preserving the current route
+        routerService.navigate([], {
+          relativeTo: this.route,
+          queryParams: queryParams,
+          // Preserve any existing query params not explicitly overwritten
+          queryParamsHandling: 'merge'
+        });
+      });
+    }).unsubscribe();
   }
 
   applyCurrentFilters(): void {
     console.log('Applying current filters:', this.currentFilters);
     
-    // Start with all tasks or my tasks depending on the toggle
-    let filtered = [...this.filteredTasks];
+    // Start with all tasks
+    let filtered = [...this.tasks];
     
-    // Apply search filter if present
-    if (this.currentFilters.search) {
-      const searchTerm = this.currentFilters.search.toLowerCase();
+    // Apply taskId filter if present (highest priority filter)
+    if (this.currentFilters.taskId) {
+      const taskId = this.currentFilters.taskId.toString();
       filtered = filtered.filter((task: Task) => 
-        // Search by task ID (convert to string for comparison)
-        (task.id !== undefined && task.id.toString().includes(searchTerm)) ||
-        // Search by title
-        task.title.toLowerCase().includes(searchTerm) || 
-        // Search by description
-        (task.description && task.description.toLowerCase().includes(searchTerm))
+        task.id !== undefined && task.id.toString() === taskId
       );
-    }
-    
-    // Apply status filter if present
-    if (this.currentFilters.status) {
-      filtered = filtered.filter((task: Task) => task.status === this.currentFilters.status);
-    }
-    
-    // Apply priority filter if present
-    if (this.currentFilters.priority) {
-      filtered = filtered.filter((task: Task) => task.priority === this.currentFilters.priority);
-    }
-    
-    // Apply assignee filter if present
-    if (this.currentFilters.assignee) {
-      filtered = filtered.filter((task: Task) => task.assignee === this.currentFilters.assignee);
+      
+      // If we found the task by ID, highlight it visually
+      if (filtered.length === 1) {
+        console.log(`Found task with ID ${taskId}:`, filtered[0]);
+        // We'll add a visual highlight in the HTML template
+      } else if (filtered.length === 0) {
+        console.log(`No task found with ID ${taskId}`);
+      }
+    } else {
+      // Apply search filter if present
+      if (this.currentFilters.search) {
+        const searchTerm = this.currentFilters.search.toLowerCase();
+        filtered = filtered.filter((task: Task) => 
+          // Search by task ID (convert to string for comparison)
+          (task.id !== undefined && task.id.toString().includes(searchTerm)) ||
+          // Search by title
+          task.title.toLowerCase().includes(searchTerm) || 
+          // Search by description
+          (task.description && task.description.toLowerCase().includes(searchTerm)) ||
+          // Search by task type
+          (task.task_type && task.task_type.toLowerCase().includes(searchTerm)) ||
+          // Search by assignee
+          (task.assignee && task.assignee.toLowerCase().includes(searchTerm))
+        );
+      }
+      
+      // Apply status filter if present
+      if (this.currentFilters.status) {
+        filtered = filtered.filter((task: Task) => task.status === this.currentFilters.status);
+      }
+      
+      // Apply priority filter if present
+      if (this.currentFilters.priority) {
+        filtered = filtered.filter((task: Task) => task.priority === this.currentFilters.priority);
+      }
+      
+      // Apply assignee filter if present
+      if (this.currentFilters.assignee) {
+        filtered = filtered.filter((task: Task) => task.assignee === this.currentFilters.assignee);
+      }
+      
+      // Apply task type filter if present
+      if (this.currentFilters.task_type) {
+        filtered = filtered.filter((task: Task) => task.task_type === this.currentFilters.task_type);
+      }
+      
+      // Apply my tasks filter if enabled
+      if (this.showingMyTasks) {
+        const currentUser = this.authService.getCurrentUser();
+        if (currentUser && currentUser.name) {
+          filtered = filtered.filter((task: Task) => task.assignee === currentUser.name);
+        }
+      }
     }
     
     // Update filtered tasks
@@ -625,36 +820,32 @@ export class TaskListViewComponent implements OnInit {
   
   /**
    * Converts an array of tasks to CSV format
-   * @param tasks Array of tasks to convert
-   * @returns CSV string
+   * @param tasks The tasks to convert
+   * @returns CSV formatted string
    */
   private convertTasksToCSV(tasks: Task[]): string {
     if (tasks.length === 0) {
-      return 'No tasks found';
+      return 'id,title,description,status,priority,task_type,assignee,dueDate';
     }
     
-    // Define CSV headers
-    const headers = ['ID', 'Title', 'Description', 'Status', 'Priority', 'Assignee', 'Due Date', 'Created At'];
+    // Create header row
+    const headers = ['id', 'title', 'description', 'status', 'priority', 'task_type', 'assignee', 'dueDate'];
+    let csvContent = headers.join(',') + '\n';
     
-    // Create CSV rows
-    const rows = tasks.map(task => {
-      return [
-        task.id || '',
+    // Add data rows
+    tasks.forEach(task => {
+      const row = [
+        task.id?.toString() || '',
         this.escapeCSVField(task.title || ''),
         this.escapeCSVField(task.description || ''),
         task.status || '',
         task.priority || '',
+        task.task_type || '',
         this.escapeCSVField(task.assignee || ''),
-        task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '',
-        task.created_at ? new Date(task.created_at).toLocaleDateString() : ''
+        task.dueDate || ''
       ];
+      csvContent += row.join(',') + '\n';
     });
-    
-    // Combine headers and rows
-    const csvArray = [headers, ...rows];
-    
-    // Convert to CSV string
-    const csvContent = csvArray.map(row => row.join(',')).join('\n');
     
     return csvContent;
   }

@@ -49,7 +49,21 @@ import { ApiService, User } from '../services/api.service';
           </select>
         </div>
         
-
+        <div class="filter-group task-type-filter">
+          <label>Task Type:</label>
+          <div class="task-type-selector">
+            <select [(ngModel)]="taskTypeFilter" (change)="onFilterChange()" class="task-type-select">
+              <option value="">All Types</option>
+              <option *ngFor="let type of taskTypes" [value]="type">
+                {{ type | titlecase }}
+              </option>
+            </select>
+            <div class="task-type-preview {{ taskTypeFilter }}" *ngIf="taskTypeFilter">
+              <span class="type-icon">{{ getTaskTypeIcon(taskTypeFilter) }}</span>
+              <span class="type-label">{{ taskTypeFilter | titlecase }}</span>
+            </div>
+          </div>
+        </div>
         
         <div class="filter-group">
           <button 
@@ -133,6 +147,64 @@ import { ApiService, User } from '../services/api.service';
       background-color: white;
     }
     
+    .task-type-filter {
+      flex-grow: 1;
+      max-width: 250px;
+    }
+    
+    .task-type-selector {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .task-type-select {
+      width: 100%;
+    }
+    
+    .task-type-preview {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 3px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      background-color: #F4F5F7;
+      border: 1px solid #DFE1E6;
+      width: fit-content;
+    }
+    
+    .task-type-preview.story {
+      background-color: #E3FCEF;
+      color: #006644;
+      border-color: #ABF5D1;
+    }
+    
+    .task-type-preview.bug {
+      background-color: #FFEBE6;
+      color: #DE350B;
+      border-color: #FFBDAD;
+    }
+    
+    .task-type-preview.task {
+      background-color: #DEEBFF;
+      color: #0052CC;
+      border-color: #B3D4FF;
+    }
+    
+    .task-type-preview.epic {
+      background-color: #EAE6FF;
+      color: #403294;
+      border-color: #C0B6F2;
+    }
+    
+    .task-type-preview.subtask {
+      background-color: #F4F5F7;
+      color: #42526E;
+      border-color: #DFE1E6;
+    }
+    
     .clear-filters-btn {
       margin-top: 20px;
       padding: 8px 16px;
@@ -173,9 +245,11 @@ export class TaskFilterComponent implements OnInit, OnDestroy {
   statusFilter: string = '';
   priorityFilter: string = '';
   assigneeFilter: string = '';
+  taskTypeFilter: string = '';
   
   statuses = ['pending', 'in_progress', 'blocked', 'completed'];
   priorities = ['low', 'medium', 'high', 'critical'];
+  taskTypes = ['story', 'bug', 'task', 'epic', 'subtask'];
   users: string[] = [];
   dbUsers: User[] = [];
   
@@ -245,11 +319,12 @@ export class TaskFilterComponent implements OnInit, OnDestroy {
     this.statusFilter = '';
     this.priorityFilter = '';
     this.assigneeFilter = '';
+    this.taskTypeFilter = '';
     this.emitFilters();
   }
   
   hasActiveFilters(): boolean {
-    return !!(this.searchTerm || this.statusFilter || this.priorityFilter || this.assigneeFilter);
+    return !!(this.searchTerm || this.statusFilter || this.priorityFilter || this.assigneeFilter || this.taskTypeFilter);
   }
   
   private emitFilters(): void {
@@ -257,7 +332,20 @@ export class TaskFilterComponent implements OnInit, OnDestroy {
       search: this.searchTerm,
       status: this.statusFilter,
       priority: this.priorityFilter,
-      assignee: this.assigneeFilter
+      assignee: this.assigneeFilter,
+      task_type: this.taskTypeFilter
     });
+  }
+  
+  // Get icon for task type
+  getTaskTypeIcon(type: string | undefined): string {
+    switch (type) {
+      case 'story': return '📝'; // Document icon for story
+      case 'bug': return '🐞'; // Bug icon for bug
+      case 'epic': return '🏆'; // Trophy icon for epic
+      case 'subtask': return '📎'; // Paperclip icon for subtask
+      case 'task':
+      default: return '✓'; // Checkmark icon for task
+    }
   }
 }

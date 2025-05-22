@@ -57,10 +57,12 @@ import { AuthService } from '../services/auth.service';
           <div class="demo-accounts">
             <p>Demo Accounts:</p>
             <ul>
-              <li><strong>Admin:</strong> johndoe</li>
-              <li><strong>User:</strong> janesmith</li>
+              <li><strong>Admin:</strong> johndoe (password: password123)</li>
+              <li><strong>User:</strong> janesmith (password: password123)</li>
+              <li><strong>User:</strong> alexjohnson (password: password123)</li>
+              <li><strong>User:</strong> samwilson (password: password123)</li>
             </ul>
-            <p class="note">Note: Any password will work for demo purposes</p>
+            <p class="note">Note: Use the exact credentials shown above</p>
           </div>
         </form>
       </div>

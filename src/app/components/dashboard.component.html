@@ -42,7 +42,7 @@
     <h3>Task Status Distribution</h3>
     <div class="charts-container">
       <div class="status-grid">
-        <div class="status-card pending">
+        <div class="status-card pending clickable" (click)="navigateToTaskList('pending')">
           <div class="status-icon">P</div>
           <div class="status-info">
             <div class="status-count">{{ getTaskCountByStatus('pending') }}</div>
@@ -50,7 +50,7 @@
             <div class="status-percent">{{ getStatusPercentage('pending') }}%</div>
           </div>
         </div>
-        <div class="status-card in-progress">
+        <div class="status-card in-progress clickable" (click)="navigateToTaskList('in_progress')">
           <div class="status-icon">IP</div>
           <div class="status-info">
             <div class="status-count">{{ getTaskCountByStatus('in_progress') }}</div>
@@ -58,7 +58,7 @@
             <div class="status-percent">{{ getStatusPercentage('in_progress') }}%</div>
           </div>
         </div>
-        <div class="status-card blocked">
+        <div class="status-card blocked clickable" (click)="navigateToTaskList('blocked')">
           <div class="status-icon">B</div>
           <div class="status-info">
             <div class="status-count">{{ getTaskCountByStatus('blocked') }}</div>
@@ -66,7 +66,7 @@
             <div class="status-percent">{{ getStatusPercentage('blocked') }}%</div>
           </div>
         </div>
-        <div class="status-card completed">
+        <div class="status-card completed clickable" (click)="navigateToTaskList('completed')">
           <div class="status-icon">C</div>
           <div class="status-info">
             <div class="status-count">{{ getTaskCountByStatus('completed') }}</div>
@@ -134,7 +134,7 @@
     <h3>Recent Tasks</h3>
     <div class="recent-tasks">
       @for (task of tasks.slice(0, 5); track task.id) {
-        <div class="recent-task-item priority-{{ task.priority }}">
+        <div class="recent-task-item priority-{{ task.priority }} clickable" (click)="navigateToTaskById(task.id)">
           <div class="task-status {{ task.status }}"></div>
           <div class="task-info">
             <div class="task-title">{{ task.title }}</div>
@@ -145,6 +145,7 @@
               @if (task.priority) {
                 <span class="task-priority {{ task.priority }}">{{ task.priority }}</span>
               }
+              <span class="task-id">#{{ task.id }}</span>
             </div>
           </div>
         </div>
