@@ -1,0 +1,301 @@
+---
+# Source: fullstack-app/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fullstack-app
+  labels:
+    app: fullstack-app
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+---
+# Source: fullstack-app/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fullstack-app-mysql-secrets
+  labels:
+    app: fullstack-app
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+type: Opaque
+data:
+  root-password: Y2hhbmdlbWU=
+  db-password: Y2hhbmdlbWU=
+---
+# Source: fullstack-app/templates/mysql-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fullstack-app-mysql-pvc
+  labels:
+    app: fullstack-app-mysql
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: fullstack-app/templates/backend-deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: fullstack-app-backend
+  labels:
+    app: fullstack-app-backend
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: fullstack-app-backend
+    release: fullstack-app
+---
+# Source: fullstack-app/templates/frontend-deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: fullstack-app-frontend
+  labels:
+    app: fullstack-app-frontend
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: fullstack-app-frontend
+    release: fullstack-app
+---
+# Source: fullstack-app/templates/mysql-deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: fullstack-app-mysql
+  labels:
+    app: fullstack-app-mysql
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: 3306
+      protocol: TCP
+      name: mysql
+  selector:
+    app: fullstack-app-mysql
+    release: fullstack-app
+---
+# Source: fullstack-app/templates/backend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fullstack-app-backend
+  labels:
+    app: fullstack-app-backend
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fullstack-app-backend
+      release: fullstack-app
+  template:
+    metadata:
+      labels:
+        app: fullstack-app-backend
+        release: fullstack-app
+    spec:
+      containers:
+        - name: fullstack-app-backend
+          image: "localhost:32000/fullstack-app_backend:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          env:
+            - name: DB_HOST
+              value: "{{ .Release.Name }}-mysql"
+            - name: DB_NAME
+              value: "taskmanager"
+            - name: DB_USER
+              value: "root"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fullstack-app-mysql-secrets
+                  key: db-password
+            - name: PORT
+              value: "3000"
+---
+# Source: fullstack-app/templates/frontend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fullstack-app-frontend
+  labels:
+    app: fullstack-app-frontend
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fullstack-app-frontend
+      release: fullstack-app
+  template:
+    metadata:
+      labels:
+        app: fullstack-app-frontend
+        release: fullstack-app
+    spec:
+      containers:
+        - name: fullstack-app-frontend
+          image: "localhost:32000/fullstack-app_frontend:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          env:
+            - name: API_URL
+              value: "http://fullstack-app-backend:3000"
+---
+# Source: fullstack-app/templates/mysql-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fullstack-app-mysql
+  labels:
+    app: fullstack-app-mysql
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fullstack-app-mysql
+      release: fullstack-app
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: fullstack-app-mysql
+        release: fullstack-app
+    spec:
+      containers:
+        - name: fullstack-app-mysql
+          image: "mysql:8"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mysql
+              containerPort: 3306
+              protocol: TCP
+          env:
+            - name: MYSQL_DATABASE
+              value: "taskmanager"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fullstack-app-mysql-secrets
+                  key: root-password
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: fullstack-app-mysql-pvc
+---
+# Source: fullstack-app/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fullstack-app-ingress
+  labels:
+    app: fullstack-app
+    chart: fullstack-app-0.1.0
+    release: fullstack-app
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "task-manager.local"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fullstack-app-frontend
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: fullstack-app-backend
+                port:
+                  number: 3000

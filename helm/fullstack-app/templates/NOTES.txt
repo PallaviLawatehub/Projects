@@ -1,0 +1,37 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}
+
+{{- if .Values.ingress.enabled }}
+You can access your application at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+To access your application, you need to forward the service ports:
+
+For the frontend:
+  kubectl port-forward svc/{{ .Release.Name }}-frontend {{ .Values.frontend.service.port }}:{{ .Values.frontend.service.port }}
+
+Then access the application at:
+  http://localhost:{{ .Values.frontend.service.port }}
+
+For the backend API:
+  kubectl port-forward svc/{{ .Release.Name }}-backend {{ .Values.backend.service.port }}:{{ .Values.backend.service.port }}
+
+Then access the API at:
+  http://localhost:{{ .Values.backend.service.port }}/api
+{{- end }}
+
+Database connection details:
+  Host: {{ .Release.Name }}-mysql
+  Port: {{ .Values.mysql.service.port }}
+  Database: {{ .Values.mysql.env.MYSQL_DATABASE }}
+  Username: {{ .Values.backend.env.DB_USER }}
+  
+Note: Passwords are stored in Kubernetes secrets and are not displayed here for security reasons.

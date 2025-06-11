@@ -86,6 +86,23 @@ import { ApiService, Task } from '../services/api.service';
           </div>
           
           <div class="form-group half-width">
+            <label for="task_type">Task Type:</label>
+            <select
+              id="task_type"
+              name="task_type"
+              [(ngModel)]="task.task_type"
+              required
+              class="form-control"
+            >
+              @for (type of taskTypes; track type) {
+                <option [value]="type">{{ type | titlecase }}</option>
+              }
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group half-width">
             <label for="dueDate">Due Date:</label>
             <input
               type="date"
@@ -94,6 +111,10 @@ import { ApiService, Task } from '../services/api.service';
               [(ngModel)]="task.dueDate"
               class="form-control"
             >
+          </div>
+          
+          <div class="form-group half-width">
+            <!-- Placeholder to maintain layout -->
           </div>
         </div>
         
@@ -187,12 +208,14 @@ export class TaskFormComponent {
     description: '',
     status: 'pending',
     priority: 'medium',
+    task_type: 'story',
     assignee: '',
     dueDate: ''
   };
 
   priorities = ['low', 'medium', 'high', 'critical'];
   statuses = ['pending', 'in_progress', 'completed', 'blocked'];
+  taskTypes = ['story', 'bug', 'task', 'epic', 'subtask'];
   users = ['John Doe', 'Jane Smith', 'Alex Johnson', 'Sam Wilson'];
 
   constructor(private apiService: ApiService, private router: Router) {}

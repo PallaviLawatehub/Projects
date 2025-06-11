@@ -60,6 +60,21 @@ import { ApiService, Task, User } from '../services/api.service';
           
           <div class="form-row">
             <div class="form-group half-width">
+              <label for="task_type">Task Type</label>
+              <select id="task_type" [(ngModel)]="taskData.task_type">
+                <option *ngFor="let type of taskTypes" [value]="type">
+                  {{ type | titlecase }}
+                </option>
+              </select>
+            </div>
+            
+            <div class="form-group half-width">
+              <!-- Placeholder for layout balance -->
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group half-width">
               <label for="assignee">Assignee</label>
               <select id="assignee" [(ngModel)]="taskData.assignee">
                 <option value="">Unassigned</option>
@@ -79,14 +94,21 @@ import { ApiService, Task, User } from '../services/api.service';
         </div>
         
         <div class="dialog-footer">
-          <button class="cancel-btn" (click)="onClose()">Cancel</button>
-          <button 
-            class="save-btn" 
-            [disabled]="!isFormValid()" 
-            (click)="onSave()"
-          >
-            {{ isEditMode ? 'Update' : 'Create' }}
-          </button>
+          <div class="footer-left" *ngIf="isEditMode">
+            <button class="subtask-btn" (click)="onCreateSubtask()" *ngIf="task?.task_type !== 'subtask'">
+              <span class="subtask-icon">📎</span> Create Subtask
+            </button>
+          </div>
+          <div class="footer-right">
+            <button class="cancel-btn" (click)="onClose()">Cancel</button>
+            <button 
+              class="save-btn" 
+              [disabled]="!isFormValid()" 
+              (click)="onSave()"
+            >
+              {{ isEditMode ? 'Update' : 'Create' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -178,10 +200,40 @@ import { ApiService, Task, User } from '../services/api.service';
     
     .dialog-footer {
       display: flex;
-      justify-content: flex-end;
-      gap: 12px;
+      justify-content: space-between;
       padding: 16px 20px;
       border-top: 1px solid #DFE1E6;
+    }
+    
+    .footer-left {
+      display: flex;
+      align-items: center;
+    }
+    
+    .footer-right {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .subtask-btn {
+      padding: 8px 16px;
+      background-color: #EAE6FF;
+      border: 1px solid #C0B6F2;
+      border-radius: 4px;
+      color: #403294;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+    
+    .subtask-btn:hover {
+      background-color: #D6CBFF;
+    }
+    
+    .subtask-icon {
+      font-size: 16px;
     }
     
     .cancel-btn {
@@ -219,6 +271,7 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   
   @Output() close = new EventEmitter<void>();
   @Output() save = new EventEmitter<Task>();
+  @Output() createSubtask = new EventEmitter<Task>();
   
   taskData: Task = {
     title: '',
@@ -231,6 +284,7 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   
   statuses = ['pending', 'in_progress', 'blocked', 'completed'];
   priorities = ['low', 'medium', 'high', 'critical'];
+  taskTypes = ['story', 'bug', 'task', 'epic', 'subtask'];
   users: string[] = [];
   dbUsers: User[] = [];
   
@@ -273,6 +327,8 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   ngOnChanges() {
     // Reset the form whenever the task or visibility changes
     if (this.visible) {
+      console.log('Dialog visible, task input:', this.task);
+      console.log('Is edit mode:', this.isEditMode);
       this.resetForm();
     }
   }
@@ -288,7 +344,12 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   resetForm() {
     if (this.isEditMode && this.task) {
       // Clone the task for editing
-      this.taskData = { ...this.task };
+      this.taskData = { 
+        ...this.task,
+        // Ensure task_type is set when editing
+        task_type: this.task.task_type || 'story'
+      };
+      console.log('Editing task with type:', this.taskData.task_type);
     } else {
       // Reset to defaults for new task
       this.taskData = {
@@ -296,6 +357,7 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
         description: '',
         status: 'pending',
         priority: 'medium',
+        task_type: 'story',
         assignee: '',
         dueDate: ''
       };
@@ -308,12 +370,40 @@ export class TaskDialogComponent implements OnInit, OnChanges, OnDestroy {
   
   onSave() {
     if (this.isFormValid()) {
-      this.save.emit(this.taskData);
+      // Log the current task data before saving
+      console.log('Current task data before save:', this.taskData);
+      console.log('Task type before save:', this.taskData.task_type);
+      
+      // Ensure we're sending a properly formatted task object
+      // Make a clean copy to avoid reference issues
+      const taskToSave: Task = {
+        ...this.taskData,
+        // Preserve the ID for updates
+        id: this.taskData.id,
+        // Ensure strings are trimmed
+        title: this.taskData.title.trim(),
+        description: this.taskData.description.trim(),
+        // Ensure other fields have proper values
+        status: this.taskData.status || 'pending',
+        priority: this.taskData.priority || 'medium',
+        task_type: this.taskData.task_type || 'story'
+      };
+      
+      console.log('Task dialog emitting save with task:', taskToSave);
+      console.log('Task type being saved:', taskToSave.task_type);
+      this.save.emit(taskToSave);
     }
   }
   
   onClose() {
     this.close.emit();
+  }
+  
+  onCreateSubtask() {
+    if (this.task && this.task.id) {
+      console.log('Creating subtask for task:', this.task);
+      this.createSubtask.emit(this.task);
+    }
   }
   
   onOverlayClick(event: MouseEvent) {

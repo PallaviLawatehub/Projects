@@ -1,6 +1,8 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, of } from 'rxjs';
-import { delay, tap } from 'rxjs/operators';
+import { Injectable, EventEmitter } from '@angular/core';
+import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { delay, tap, catchError, map } from 'rxjs/operators';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../environments/environment';
 
 export interface User {
   id: number;
@@ -16,45 +18,63 @@ export interface User {
 export class AuthService {
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser = this.currentUserSubject.asObservable();
-  
-  // Mock users for demo purposes
-  private users: User[] = [
-    { id: 1, username: 'johndoe', email: 'john@example.com', name: 'John Doe', role: 'admin' },
-    { id: 2, username: 'janesmith', email: 'jane@example.com', name: 'Jane Smith', role: 'user' },
-    { id: 3, username: 'alexjohnson', email: 'alex@example.com', name: 'Alex Johnson', role: 'user' },
-    { id: 4, username: 'samwilson', email: 'sam@example.com', name: 'Sam Wilson', role: 'user' }
-  ];
+  public authChanged = new EventEmitter<boolean>();
+  private apiUrl = environment.apiUrl;
 
-  constructor() {
+  constructor(private http: HttpClient) {
     // Check if user is stored in localStorage
     const storedUser = localStorage.getItem('currentUser');
     if (storedUser) {
       this.currentUserSubject.next(JSON.parse(storedUser));
     }
   }
+  
+  /**
+   * Gets the appropriate backend URL based on environment
+   * @param endpoint API endpoint path (without leading slash)
+   * @returns Full URL to the API endpoint
+   */
+  private getBackendUrl(endpoint: string): string {
+    // For Kubernetes environment, use the service name
+    if (environment.production) {
+      // Use the Kubernetes service name
+      return `http://my-fullstack-app-backend:3000/api/${endpoint}`;
+    } else {
+      // For local development
+      return `${this.apiUrl}/api/${endpoint}`;
+    }
+  }
 
   login(username: string, password: string): Observable<User | null> {
-    // In a real app, this would make an HTTP request to a backend API
-    const user = this.users.find(u => u.username === username);
+    const loginUrl = this.getBackendUrl('login');
+    console.log('Logging in at:', loginUrl);
     
-    // Mock authentication - in a real app, you'd verify the password
-    if (user) {
-      // Simulate API delay
-      return of(user).pipe(
-        delay(500),
-        tap(user => {
+    return this.http.post<any>(loginUrl, { username, password }).pipe(
+      map(response => {
+        // Extract user from response
+        const user = response.user;
+        
+        if (user) {
+          // Store user details and token in local storage
           localStorage.setItem('currentUser', JSON.stringify(user));
           this.currentUserSubject.next(user);
-        })
-      );
-    }
-    
-    return of(null).pipe(delay(500));
+          this.authChanged.emit(true);
+          return user;
+        }
+        
+        return null;
+      }),
+      catchError(error => {
+        console.error('Login error:', error);
+        return throwError(() => new Error(error.error?.message || 'Login failed'));
+      })
+    );
   }
 
   logout(): void {
     localStorage.removeItem('currentUser');
     this.currentUserSubject.next(null);
+    this.authChanged.emit(false);
   }
 
   isLoggedIn(): boolean {
@@ -63,5 +83,11 @@ export class AuthService {
 
   getCurrentUser(): User | null {
     return this.currentUserSubject.value;
+  }
+  
+  // Check if the current user has admin rights
+  isAdmin(): boolean {
+    const currentUser = this.getCurrentUser();
+    return currentUser ? currentUser.role === 'admin' : false;
   }
 }
