@@ -30,12 +30,40 @@ function calculateRetentionThreshold(retentionValue, timeUnit) {
 }
 
 // Function to delete completed tasks older than the threshold
-async function deleteCompletedTasksOlderThan(threshold) {
+// Function to delete completed tasks based on their individual retention periods
+async function deleteCompletedTasks() {
     try {
-        const [result] = await pool.query(
-            'DELETE FROM tasks WHERE status = "completed" AND created_at < ?',
-            [threshold]
+        // Get all completed tasks that have a retention period set
+        const [tasks] = await pool.query(
+            'SELECT id, completed_at, retention_minutes FROM tasks WHERE status = "completed" AND retention_minutes IS NOT NULL'
         );
+        
+        if (tasks.length === 0) {
+            console.log('No completed tasks with retention periods found');
+            return 0;
+        }
+        
+        // Calculate the threshold for each task
+        const tasksToDelete = tasks.filter(task => {
+            if (!task.completed_at) return false;
+            const threshold = new Date(task.completed_at);
+            threshold.setMinutes(threshold.getMinutes() + task.retention_minutes);
+            return new Date() > threshold;
+        });
+        
+        if (tasksToDelete.length === 0) {
+            console.log('No tasks have exceeded their retention period');
+            return 0;
+        }
+        
+        // Delete the tasks that have exceeded their retention period
+        const taskIds = tasksToDelete.map(task => task.id);
+        const [result] = await pool.query(
+            'DELETE FROM tasks WHERE id IN (?)',
+            [taskIds]
+        );
+        
+        console.log(`Successfully deleted ${result.affectedRows} completed tasks that exceeded their retention periods`);
         return result.affectedRows;
     } catch (error) {
         console.error('Error deleting completed tasks:', error);
@@ -45,10 +73,6 @@ async function deleteCompletedTasksOlderThan(threshold) {
 
 // Function to schedule the cleanup job
 function scheduleCleanupJob() {
-    // Get retention settings from environment or use defaults
-    const retentionValue = process.env.TASK_RETENTION_VALUE || 30;
-    const timeUnit = process.env.TASK_RETENTION_UNIT || 'days';
-    
     // Cancel existing job if it exists
     if (cleanupJob) {
         cleanupJob.cancel();
@@ -59,15 +83,14 @@ function scheduleCleanupJob() {
         // Schedule to run daily at midnight
         cleanupJob = schedule.scheduleJob('0 0 * * *', async () => {
             try {
-                console.log(`Running scheduled cleanup of completed tasks older than ${retentionValue} ${timeUnit}`);
-                const threshold = calculateRetentionThreshold(retentionValue, timeUnit);
-                const deletedCount = await deleteCompletedTasksOlderThan(threshold);
+                console.log('Running scheduled cleanup of completed tasks with individual retention periods');
+                const deletedCount = await deleteCompletedTasks();
                 console.log(`Cleanup completed: ${deletedCount} tasks deleted`);
             } catch (error) {
                 console.error('Error in scheduled cleanup job:', error);
             }
         });
-        console.log(`Scheduled daily cleanup job for tasks older than ${retentionValue} ${timeUnit}`);
+        console.log('Scheduled daily cleanup job for tasks with individual retention periods');
     }
 }
 
@@ -224,6 +247,7 @@ async function initializeDatabase() {
                     dueDate DATE,
                     userId INT,
                     parentId INT,
+                    retention_minutes INT DEFAULT NULL COMMENT 'Retention period in minutes for this task',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     completed_at TIMESTAMP NULL,
                     FOREIGN KEY (userId) REFERENCES users(id) ON DELETE SET NULL,
@@ -461,44 +485,6 @@ app.get('/api/tasks/user/:userId', async (req, res) => {
             } else {
                 // If not numeric, just search in title/description
                 filters.push('(title LIKE ? OR description LIKE ?)');
-                const searchTerm = `%${req.query.search}%`;
-                queryParams.push(searchTerm, searchTerm);
-            }
-        }
-        
-        if (req.query.status) {
-            filters.push('status = ?');
-            queryParams.push(req.query.status);
-        }
-        
-        if (req.query.priority) {
-            filters.push('priority = ?');
-            queryParams.push(req.query.priority);
-        }
-        
-        if (req.query.task_type) {
-            filters.push('task_type = ?');
-            queryParams.push(req.query.task_type);
-        }
-        
-        // Additional assignee filter is not needed for user tasks
-        // since we're already filtering by user ID or assignee
-        
-        if (filters.length > 0) {
-            query += ' AND ' + filters.join(' AND ');
-        }
-        
-        query += ' ORDER BY created_at DESC';
-        
-        console.log('User tasks query:', query, 'Params:', queryParams);
-        const [rows] = await pool.query(query, queryParams);
-        console.log(`Found ${rows.length} tasks for user ${userId} (${userName})`);
-        res.json(rows);
-    } catch (error) {
-        console.error('Error fetching user tasks:', error);
-        res.status(500).json({ error: 'Error fetching user tasks' });
-    }
-});
 
 // Update task (all fields)
 app.put('/api/tasks/:id', async (req, res) => {
@@ -556,90 +542,51 @@ app.put('/api/tasks/:id', async (req, res) => {
 // Update specific task fields (PATCH)
 app.patch('/api/tasks/:id', async (req, res) => {
     try {
-        console.log('Received task patch request:', { id: req.params.id, ...req.body });
-
+        const taskId = parseInt(req.params.id);
+        const updates = {};
+        
         // Only update the fields that are provided in the request body
-        const updateFields = [];
-        const updateValues = [];
-        
-        // Check which fields are provided and add them to the update query
-        if (req.body.status !== undefined) {
-            updateFields.push('status = ?');
-            updateValues.push(req.body.status);
-        }
-        
-        if (req.body.priority !== undefined) {
-            updateFields.push('priority = ?');
-            updateValues.push(req.body.priority);
-        }
-        
-        if (req.body.task_type !== undefined) {
-            updateFields.push('task_type = ?');
-            updateValues.push(req.body.task_type);
-        }
-        
-        if (req.body.parentId !== undefined) {
-            updateFields.push('parentId = ?');
-            updateValues.push(req.body.parentId);
-        }
-        
-        if (req.body.assignee !== undefined) {
-            updateFields.push('assignee = ?');
-            updateValues.push(req.body.assignee);
-        }
-
-        if (req.body.title !== undefined) {
-            updateFields.push('title = ?');
-            updateValues.push(req.body.title);
-        }
-
-        if (req.body.description !== undefined) {
-            updateFields.push('description = ?');
-            updateValues.push(req.body.description);
-        }
-
-        if (req.body.dueDate !== undefined) {
-            updateFields.push('dueDate = ?');
-            // Format the date to YYYY-MM-DD format if it's not null
-            if (req.body.dueDate) {
-                // Parse the ISO date string and format it as YYYY-MM-DD
-                const date = new Date(req.body.dueDate);
-                const formattedDueDate = date.toISOString().split('T')[0]; // Extract just the date part
-                console.log('Formatted due date in PATCH:', formattedDueDate);
-                updateValues.push(formattedDueDate);
-            } else {
-                updateValues.push(null);
+        if (req.body.title !== undefined) updates.title = req.body.title;
+        if (req.body.description !== undefined) updates.description = req.body.description;
+        if (req.body.status !== undefined) updates.status = req.body.status;
+        if (req.body.priority !== undefined) updates.priority = req.body.priority;
+        if (req.body.task_type !== undefined) updates.task_type = req.body.task_type;
+        if (req.body.assignee !== undefined) updates.assignee = req.body.assignee;
+        if (req.body.dueDate !== undefined) updates.dueDate = req.body.dueDate;
+        if (req.body.userId !== undefined) updates.userId = req.body.userId;
+        if (req.body.parentId !== undefined) updates.parentId = req.body.parentId;
+        if (req.body.retentionMinutes !== undefined) {
+            if (typeof req.body.retentionMinutes !== 'number' || req.body.retentionMinutes <= 0) {
+                return res.status(400).json({ error: 'retentionMinutes must be a positive number' });
             }
-        }
-
-        if (req.body.userId !== undefined) {
-            updateFields.push('userId = ?');
-            updateValues.push(req.body.userId);
+            updates.retention_minutes = req.body.retentionMinutes;
         }
         
-        if (updateFields.length === 0) {
+        if (Object.keys(updates).length === 0) {
             return res.status(400).json({ error: 'No fields to update' });
         }
         
-        // Add the ID to the values array
-        updateValues.push(parseInt(req.params.id));
+        // Build the update query
+        const updateFields = Object.keys(updates).map(field => `${field} = ?`).join(', ');
+        const values = Object.values(updates);
+        values.push(taskId);
         
         const [result] = await pool.query(
-            `UPDATE tasks SET ${updateFields.join(', ')} WHERE id = ?`,
-            updateValues
+            `UPDATE tasks SET ${updateFields} WHERE id = ?`,
+            values
         );
-        console.log('Patch result:', result);
-
+        
         if (result.affectedRows === 0) {
-            res.status(404).json({ error: 'Task not found' });
-        } else {
-            const [updatedTask] = await pool.query('SELECT * FROM tasks WHERE id = ?', [req.params.id]);
-            console.log('Updated task:', updatedTask[0]);
-            res.json(updatedTask[0]);
+            return res.status(404).json({ error: 'Task not found' });
         }
+        
+        // Get the updated task
+        const [task] = await pool.query('SELECT * FROM tasks WHERE id = ?', [taskId]);
+        
+        res.json(task[0]);
     } catch (error) {
-        console.error('Error patching task:', error);
-        res.status(500).json({ error: 'Error patching task: ' + error.message });
+        console.error('Error updating task:', error);
+        res.status(500).json({ error: 'Error updating task' });
     }
 });
 
@@ -653,6 +600,16 @@ app.patch('/api/tasks/:id/status', async (req, res) => {
             return res.status(400).json({ error: 'Status is required' });
         }
         
+        // Get the current task to check its type and current status
+        const [currentTask] = await pool.query('SELECT * FROM tasks WHERE id = ?', [req.params.id]);
+        
+        if (currentTask.length === 0) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+        
+        const task = currentTask[0];
+        console.log(`Task #${task.id} is a ${task.task_type}, changing status from ${task.status} to ${status}`);
+        
         // Set completed_at timestamp if task is being marked as completed
         let updateQuery;
         let queryParams;
@@ -661,6 +618,13 @@ app.patch('/api/tasks/:id/status', async (req, res) => {
             updateQuery = 'UPDATE tasks SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?';
             queryParams = [status, req.params.id];
             console.log('Setting completed_at timestamp');
+            
+            // If this is a story being completed, check if it should be auto-deleted soon
+            if (task.task_type === 'story') {
+                const storyRetentionValue = process.env.STORY_RETENTION_VALUE || 7; // Default 7 days for stories
+                const timeUnit = process.env.STORY_RETENTION_UNIT || 'days';
+                console.log(`Note: This completed story will be auto-deleted after ${storyRetentionValue} ${timeUnit}`);
+            }
         } else {
             // If task is being moved from completed to another status, clear the completed_at timestamp
             updateQuery = 'UPDATE tasks SET status = ?, completed_at = NULL WHERE id = ?';
@@ -982,12 +946,15 @@ app.get('/api/health', (req, res) => {
 });
 
 // Function to clean up completed tasks after a specified retention period
-async function cleanupCompletedTasks(retention = 30, unit = 'days') {
+async function cleanupCompletedTasks(retention = 30, unit = 'days', taskType = null) {
     try {
-        console.log(`Running scheduled cleanup of completed tasks older than ${retention} ${unit}...`);
+        const taskTypeLabel = taskType ? `${taskType} ` : '';
+        console.log(`Running cleanup of completed ${taskTypeLabel}tasks older than ${retention} ${unit}...`);
         
         // Calculate the cutoff date (tasks completed before this date will be deleted)
         const cutoffDate = new Date();
+        const now = new Date();
+        console.log(`Current time: ${now.toISOString()}`); 
         
         if (unit === 'days') {
             cutoffDate.setDate(cutoffDate.getDate() - retention);
@@ -1000,28 +967,65 @@ async function cleanupCompletedTasks(retention = 30, unit = 'days') {
         }
         
         const formattedCutoffDate = cutoffDate.toISOString().slice(0, 19).replace('T', ' ');
+        console.log(`Cutoff date for deletion: ${formattedCutoffDate} (${retention} ${unit} ago)`);
         
-        // Find tasks to be deleted
-        const [tasksToDelete] = await pool.query(
-            'SELECT id, title FROM tasks WHERE status = "completed" AND completed_at < ?',
-            [formattedCutoffDate]
+        // First, check all completed tasks to see their completed_at timestamps
+        const [allCompletedTasks] = await pool.query(
+            'SELECT id, title, task_type, completed_at FROM tasks WHERE status = "completed"'
         );
         
-        if (tasksToDelete.length === 0) {
-            console.log(`No completed tasks older than ${retention} ${unit} found for deletion`);
-            return;
+        console.log(`Total completed tasks in database: ${allCompletedTasks.length}`);
+        if (allCompletedTasks.length > 0) {
+            console.log('Completed tasks with timestamps:');
+            allCompletedTasks.forEach(task => {
+                console.log(`Task #${task.id}: ${task.title} (${task.task_type}) - completed at: ${task.completed_at}`);
+            });
         }
         
-        console.log(`Found ${tasksToDelete.length} completed tasks to delete:`, 
-            tasksToDelete.map(t => `#${t.id}: ${t.title}`).join(', '));
+        // Build the query based on whether we're filtering by task type
+        let query = 'SELECT id, title, task_type, completed_at FROM tasks WHERE status = "completed" AND completed_at < ?';
+        const queryParams = [formattedCutoffDate];
+        
+        if (taskType) {
+            query += ' AND task_type = ?';
+            queryParams.push(taskType);
+        }
+        
+        console.log(`Query: ${query}`);
+        console.log(`Query params: ${queryParams}`);
+        
+        // Find tasks to be deleted
+        const [tasksToDelete] = await pool.query(query, queryParams);
+        
+        if (tasksToDelete.length === 0) {
+            console.log(`No completed ${taskTypeLabel}tasks older than ${retention} ${unit} found for deletion`);
+            return {
+                deletedCount: 0,
+                tasks: []
+            };
+        }
+        
+        // Log tasks that will be deleted (limit to first 5 for readability)
+        console.log(`Found ${tasksToDelete.length} completed ${taskTypeLabel}tasks to delete:`, 
+            tasksToDelete.map(t => `#${t.id}: ${t.title} (${t.task_type}) - completed at: ${t.completed_at}`).slice(0, 5).join(', ') + 
+            (tasksToDelete.length > 5 ? ` and ${tasksToDelete.length - 5} more...` : ''));
+        
+        // Build the delete query
+        let deleteQuery = 'DELETE FROM tasks WHERE status = "completed" AND completed_at < ?';
+        const deleteParams = [formattedCutoffDate];
+        
+        if (taskType) {
+            deleteQuery += ' AND task_type = ?';
+            deleteParams.push(taskType);
+        }
+        
+        console.log(`Delete query: ${deleteQuery}`);
+        console.log(`Delete params: ${deleteParams}`);
         
         // Delete the tasks
-        const [result] = await pool.query(
-            'DELETE FROM tasks WHERE status = "completed" AND completed_at < ?',
-            [formattedCutoffDate]
-        );
+        const [result] = await pool.query(deleteQuery, deleteParams);
         
-        console.log(`Successfully deleted ${result.affectedRows} completed tasks older than ${retention} ${unit}`);
+        console.log(`Successfully deleted ${result.affectedRows} completed ${taskTypeLabel}tasks older than ${retention} ${unit}`);
         
         // Return deletion results for potential use by API endpoints
         return {
@@ -1037,16 +1041,21 @@ async function cleanupCompletedTasks(retention = 30, unit = 'days') {
 // Endpoint to manually trigger task cleanup with custom retention period
 app.post('/api/admin/cleanup-tasks', async (req, res) => {
     try {
-        const { retention, unit } = req.body;
+        const { retention, unit, taskType } = req.body;
         const retentionValue = parseInt(retention) || 30;
-        const timeUnit = unit === 'minutes' ? 'minutes' : 'days';
+        const timeUnit = unit === 'minutes' || unit === 'hours' ? unit : 'days';
         
         if (retentionValue < 1) {
             return res.status(400).json({ error: `Retention ${timeUnit} must be at least 1` });
         }
         
-        await cleanupCompletedTasks(retentionValue, timeUnit);
-        res.json({ message: `Cleanup of completed tasks older than ${retentionValue} ${timeUnit} has been triggered` });
+        const result = await cleanupCompletedTasks(retentionValue, timeUnit, taskType);
+        const taskTypeLabel = taskType ? `${taskType} ` : '';
+        res.json({ 
+            message: `Cleanup of completed ${taskTypeLabel}tasks older than ${retentionValue} ${timeUnit} has been completed`,
+            deletedCount: result.deletedCount,
+            examples: result.tasks.slice(0, 5).map(t => ({ id: t.id, title: t.title, type: t.task_type }))
+        });
     } catch (error) {
         console.error('Error triggering task cleanup:', error);
         res.status(500).json({ error: 'Error during task cleanup' });
@@ -1104,50 +1113,51 @@ app.post('/api/admin/configure-minute-cleanup', async (req, res) => {
 });
 
 // Environment variables for task cleanup settings
-const MINUTES_BEFORE_CLEANUP = process.env.MINUTES_BEFORE_CLEANUP || 30; // Default to 30 minutes
-const ENABLE_MINUTE_CLEANUP = process.env.ENABLE_MINUTE_CLEANUP === 'true' || false; // Disabled by default
+const MINUTES_BEFORE_CLEANUP = parseInt(process.env.MINUTES_BEFORE_CLEANUP || '2'); // Default to 2 minutes
+const ENABLE_MINUTE_CLEANUP = process.env.ENABLE_MINUTE_CLEANUP !== 'false'; // Enabled by default
 
-// Admin endpoint to manually trigger cleanup of completed tasks
-app.post('/api/admin/cleanup-tasks', async (req, res) => {
+// Add a new endpoint specifically for cleaning up completed stories
+app.post('/api/tasks/cleanup-stories', async (req, res) => {
     try {
-        const { retention, unit } = req.body;
+        const { retentionValue, timeUnit } = req.body;
+        const retention = parseInt(retentionValue) || 7; // Default to 7 days for stories
+        const unit = timeUnit || 'days';
 
-        if (!retention || !unit) {
-            return res.status(400).json({ error: 'Retention value and unit are required' });
-        }
-
-        console.log(`Manual cleanup triggered: ${retention} ${unit}`);
-        const threshold = calculateRetentionThreshold(retention, unit);
-        const deletedCount = await deleteCompletedTasksOlderThan(threshold);
+        console.log(`Story cleanup triggered: ${retention} ${unit}`);
+        
+        const result = await cleanupCompletedTasks(retention, unit, 'story');
 
         res.json({
             success: true,
-            message: `Cleanup completed: ${deletedCount} tasks deleted`,
-            deletedCount
+            message: `Story cleanup completed: ${result.deletedCount} completed stories deleted`,
+            deletedCount: result.deletedCount,
+            examples: result.tasks.slice(0, 5).map(t => ({ id: t.id, title: t.title }))
         });
     } catch (error) {
-        console.error('Error in manual cleanup:', error);
-        res.status(500).json({ error: 'Error during cleanup operation' });
+        console.error('Error in story cleanup:', error);
+        res.status(500).json({ error: 'Error during story cleanup operation' });
     }
 });
 
 // Endpoint to trigger cleanup of completed tasks (for compatibility with frontend)
 app.post('/api/tasks/cleanup', async (req, res) => {
     try {
-        const { retentionValue, timeUnit } = req.body;
+        const { retentionValue, timeUnit, taskType } = req.body;
 
         if (!retentionValue || !timeUnit) {
             return res.status(400).json({ error: 'Retention value and time unit are required' });
         }
 
-        console.log(`Manual cleanup triggered: ${retentionValue} ${timeUnit}`);
-        const threshold = calculateRetentionThreshold(retentionValue, timeUnit);
-        const deletedCount = await deleteCompletedTasksOlderThan(threshold);
+        const taskTypeLabel = taskType ? `${taskType} ` : '';
+        console.log(`Manual cleanup triggered: ${retentionValue} ${timeUnit} for ${taskTypeLabel}tasks`);
+        
+        const result = await cleanupCompletedTasks(retentionValue, timeUnit, taskType);
 
         res.json({
             success: true,
-            message: `Cleanup completed: ${deletedCount} tasks deleted`,
-            deletedCount
+            message: `Cleanup completed: ${result.deletedCount} ${taskTypeLabel}tasks deleted`,
+            deletedCount: result.deletedCount,
+            examples: result.tasks.slice(0, 5).map(t => ({ id: t.id, title: t.title, type: t.task_type }))
         });
     } catch (error) {
         console.error('Error in manual cleanup:', error);
@@ -1167,19 +1177,23 @@ initializeDatabase()
             
             // Minute-based cleanup job - runs every minute
             if (schedule && ENABLE_MINUTE_CLEANUP) {
-                const minuteCleanupJob = schedule.scheduleJob('* * * * *', function() {
+                const minuteCleanupJob = schedule.scheduleJob('* * * * *', async function() {
                     console.log('Running minute-based task cleanup...');
-                    // Use the new function for cleanup
-                    const threshold = calculateRetentionThreshold(MINUTES_BEFORE_CLEANUP, 'minutes');
-                    deleteCompletedTasksOlderThan(threshold)
-                        .then(deletedCount => {
-                            console.log(`Minute cleanup completed: ${deletedCount} tasks deleted`);
-                        })
-                        .catch(error => {
-                            console.error('Error in minute cleanup job:', error);
-                        });
+                    try {
+                        // Use the enhanced cleanupCompletedTasks function
+                        const result = await cleanupCompletedTasks(MINUTES_BEFORE_CLEANUP, 'minutes');
+                        console.log(`Minute cleanup completed: ${result.deletedCount} tasks deleted`);
+                        
+                        // Also check for stories specifically with a shorter retention period
+                        const storyRetention = process.env.STORY_MINUTE_RETENTION || 15; // Default to 15 minutes for stories in minute-based cleanup
+                        const storyResult = await cleanupCompletedTasks(storyRetention, 'minutes', 'story');
+                        console.log(`Minute story cleanup completed: ${storyResult.deletedCount} stories deleted`);
+                    } catch (error) {
+                        console.error('Error in minute cleanup job:', error);
+                    }
                 });
                 console.log(`Scheduled minute-based cleanup job (${MINUTES_BEFORE_CLEANUP} minutes) has been set`);
+                console.log(`Stories will be cleaned up after ${process.env.STORY_MINUTE_RETENTION || 15} minutes`);
             }
         });
     })
