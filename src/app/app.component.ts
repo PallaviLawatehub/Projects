@@ -13,7 +13,6 @@ import { filter } from 'rxjs/operators';
       <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">Task Board</a>
       <a routerLink="/list-view" routerLinkActive="active">List View</a>
-      <a routerLink="/settings" routerLinkActive="active">Settings</a>
       <a routerLink="/about" routerLinkActive="active">About</a>
       <a *ngIf="isAdmin" routerLink="/users" routerLinkActive="active" class="admin-link">User Management</a>
     </nav>
